@@ -29,6 +29,8 @@ from collector import (
     get_shindan_actions,
     get_chuokai_actions,
     get_roadmap,
+    get_case_studies,
+    get_subsidies,
 )
 
 # ページ設定
@@ -67,7 +69,7 @@ page = st.sidebar.selectbox(
     "表示するデータ",
     ["📊 総合概要", "👥 人口動態", "🏭 産業構造", "💰 経済指標", "🏘️ 市町村比較",
      "🍱 食品製造業", "🏪 商店街", "⚡ 再生可能エネルギー",
-     "🏛️ 政策提言", "📝 施策メモ"],
+     "🏛️ 政策提言", "📚 事例研究DB", "💴 補助金カレンダー", "📝 施策メモ"],
 )
 
 st.sidebar.markdown("---")
@@ -1075,6 +1077,259 @@ def page_policy():
 
 
 # ============================================================
+# 事例研究データベースページ
+# ============================================================
+def page_cases():
+    st.title("📚 事例研究データベース")
+    st.caption("他県・他地域の成功事例を検索・比較し、秋田への施策応用を考える")
+    st.markdown("---")
+
+    df = get_case_studies()
+
+    # ---- 検索・フィルター ----
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        keyword = st.text_input("🔍 キーワード検索", placeholder="例: 食品, 移住, 観光, 輸出")
+    with col2:
+        sel_bunya = st.multiselect(
+            "分野で絞り込み",
+            options=sorted(df["分野"].unique()),
+            default=[],
+        )
+    with col3:
+        sel_apply = st.multiselect(
+            "秋田への適用可能性",
+            options=["高", "中"],
+            default=["高", "中"],
+        )
+
+    # フィルタリング
+    df_filtered = df.copy()
+    if keyword:
+        mask = (
+            df_filtered["事例タイトル"].str.contains(keyword, case=False, na=False) |
+            df_filtered["施策内容"].str.contains(keyword, case=False, na=False) |
+            df_filtered["キーワードタグ"].str.contains(keyword, case=False, na=False) |
+            df_filtered["主な成果"].str.contains(keyword, case=False, na=False)
+        )
+        df_filtered = df_filtered[mask]
+    if sel_bunya:
+        df_filtered = df_filtered[df_filtered["分野"].isin(sel_bunya)]
+    if sel_apply:
+        df_filtered = df_filtered[df_filtered["秋田への適用可能性"].isin(sel_apply)]
+
+    st.markdown(f"**{len(df_filtered)} 件**の事例が見つかりました")
+    st.markdown("---")
+
+    # ---- 事例カード表示 ----
+    for _, row in df_filtered.iterrows():
+        apply_color = "🟢" if row["秋田への適用可能性"] == "高" else "🟡"
+        with st.expander(
+            f"{apply_color} **{row['事例ID']}** | {row['地域']} — {row['事例タイトル']} 【{row['分野']}】",
+            expanded=False,
+        ):
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("**📌 課題**")
+                st.info(row["課題"])
+                st.markdown("**🛠️ 施策内容**")
+                st.write(row["施策内容"])
+            with col2:
+                st.markdown("**📈 主な成果**")
+                st.success(row["主な成果"])
+                st.markdown("**💡 秋田への参考ポイント**")
+                st.warning(row["参考にすべき点"])
+
+            tags = row["キーワードタグ"].split(",")
+            st.markdown("**🏷️ タグ:** " + " ".join([f"`{t.strip()}`" for t in tags]))
+            st.caption(f"🔎 検索キーワード: {row['参考URL_キーワード']}")
+
+    st.markdown("---")
+
+    # ---- 比較ビュー ----
+    st.subheader("📊 事例比較ビュー")
+    ids = df_filtered["事例ID"].tolist()
+    if len(ids) >= 2:
+        sel_ids = st.multiselect(
+            "比較する事例を選択（2〜4件）",
+            options=ids,
+            default=ids[:2],
+            format_func=lambda x: f"{x}: {df[df['事例ID']==x]['事例タイトル'].values[0][:20]}…",
+        )
+        if len(sel_ids) >= 2:
+            df_cmp = df[df["事例ID"].isin(sel_ids)][
+                ["事例ID","地域","分野","事例タイトル","課題","主な成果","秋田への適用可能性","参考にすべき点"]
+            ].set_index("事例ID")
+            st.dataframe(df_cmp.T, use_container_width=True)
+    else:
+        st.info("フィルター結果が2件以上になると比較ビューが使えます")
+
+    st.markdown("---")
+
+    # ---- 分野別マップ ----
+    st.subheader("分野別 事例分布")
+    bunya_count = df_filtered.groupby(["分野","秋田への適用可能性"]).size().reset_index(name="件数")
+    if not bunya_count.empty:
+        fig = px.bar(
+            bunya_count, x="分野", y="件数",
+            color="秋田への適用可能性",
+            color_discrete_map={"高": "#2ca02c", "中": "#ff7f0e"},
+            title="分野×適用可能性の分布",
+            text="件数",
+        )
+        fig.update_traces(textposition="outside")
+        fig.update_layout(height=320)
+        st.plotly_chart(fig, use_container_width=True)
+
+    # Excel出力
+    csv = df_filtered.to_csv(index=False, encoding="utf-8-sig")
+    st.download_button("📥 事例一覧CSVダウンロード", csv, "akita_case_studies.csv", "text/csv")
+
+
+# ============================================================
+# 補助金カレンダーページ
+# ============================================================
+def page_subsidies():
+    st.title("💴 補助金カレンダー")
+    st.caption("主要補助金の申請期限・対象・活用ポイントを一覧管理")
+    st.markdown("---")
+
+    df = get_subsidies()
+    from datetime import date, datetime
+
+    today = date.today()
+
+    # ---- フィルター ----
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        sel_shubetsu = st.multiselect("種別", ["国", "県"], default=["国", "県"])
+    with col2:
+        sel_food = st.selectbox("食品製造業向け", ["すべて", "◎ 特に有効", "○以上"])
+    with col3:
+        sel_shotengai = st.selectbox("商店街向け", ["すべて", "◎ 特に有効", "○以上"])
+
+    df_f = df[df["種別"].isin(sel_shubetsu)].copy()
+    if sel_food == "◎ 特に有効":
+        df_f = df_f[df_f["食品製造業向け"] == "◎"]
+    if sel_shotengai == "◎ 特に有効":
+        df_f = df_f[df_f["商店街向け"] == "◎"]
+
+    # ---- 締切までの日数を計算 ----
+    def days_left(deadline_str):
+        if deadline_str == "通年":
+            return 9999
+        try:
+            d = datetime.strptime(deadline_str, "%Y-%m-%d").date()
+            return (d - today).days
+        except Exception:
+            return 9999
+
+    df_f["残り日数"] = df_f["申請締切"].apply(days_left)
+    df_f["状態"] = df_f["残り日数"].apply(
+        lambda x: "🔴 締切間近（30日以内）" if 0 <= x <= 30
+        else "🟡 申請中（31〜90日）" if 31 <= x <= 90
+        else "🟢 余裕あり" if x > 90
+        else "⚫ 通年受付"
+    )
+
+    # ---- 緊急アラート ----
+    urgent = df_f[df_f["残り日数"] <= 30]
+    if not urgent.empty:
+        st.error(f"⚠️ 締切30日以内の補助金が {len(urgent)} 件あります！")
+        for _, r in urgent.iterrows():
+            st.markdown(f"- **{r['補助金名']}** — 締切: {r['申請締切']}（残り{r['残り日数']}日）")
+        st.markdown("---")
+
+    # ---- タイムライン ----
+    st.subheader("申請スケジュール タイムライン")
+    df_timeline = df_f[df_f["残り日数"] < 9999].sort_values("残り日数")
+    if not df_timeline.empty:
+        fig = go.Figure()
+        colors = {"🔴 締切間近（30日以内）": "#d62728", "🟡 申請中（31〜90日）": "#ff7f0e", "🟢 余裕あり": "#2ca02c"}
+        for _, row in df_timeline.iterrows():
+            try:
+                start = datetime.strptime(row["申請開始"], "%Y-%m-%d")
+                end   = datetime.strptime(row["申請締切"], "%Y-%m-%d")
+                color = colors.get(row["状態"], "#aec7e8")
+                fig.add_trace(go.Scatter(
+                    x=[start, end],
+                    y=[row["補助金名"], row["補助金名"]],
+                    mode="lines+markers",
+                    line=dict(color=color, width=10),
+                    marker=dict(size=8),
+                    name=row["状態"],
+                    showlegend=False,
+                    hovertemplate=f"<b>{row['補助金名']}</b><br>開始:{row['申請開始']}<br>締切:{row['申請締切']}<br>上限:{row['補助上限']}",
+                ))
+            except Exception:
+                pass
+        fig.add_vline(x=datetime.combine(today, datetime.min.time()),
+                      line_dash="dash", line_color="red", annotation_text="今日")
+        fig.update_layout(height=380, xaxis_title="期間", yaxis_title="",
+                          margin=dict(l=10, r=10))
+        st.plotly_chart(fig, use_container_width=True)
+
+    # ---- カード一覧 ----
+    st.markdown("---")
+    st.subheader("補助金一覧")
+    for _, row in df_f.sort_values("残り日数").iterrows():
+        header = f"{row['状態']} **{row['補助金名']}**　({row['種別']}) ｜ 上限: {row['補助上限']}"
+        with st.expander(header, expanded=(row["残り日数"] <= 30)):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.markdown(f"**対象企業**\n\n{row['対象']}")
+                st.markdown(f"**補助率**\n\n{row['補助率']}")
+            with col2:
+                st.markdown(f"**申請開始**\n\n{row['申請開始']}")
+                st.markdown(f"**申請締切**\n\n{row['申請締切']}")
+                st.markdown(f"**次回公募予定**\n\n{row['次回公募予定']}")
+            with col3:
+                st.markdown(f"**窓口**\n\n{row['窓口']}")
+                st.markdown(f"**食品製造業** {row['食品製造業向け']} ／ **商店街** {row['商店街向け']}")
+            st.info(f"💡 {row['メモ']}")
+
+    # ---- Gmail通知設定 ----
+    st.markdown("---")
+    st.subheader("📧 締切アラートメール設定")
+    st.markdown("補助金の締切が近づいたら自動でメールを受け取れます。")
+
+    with st.form("gmail_alert_form"):
+        alert_days = st.selectbox("何日前に通知しますか？", [60, 30, 14, 7], index=1)
+        target_subsidies = st.multiselect(
+            "通知したい補助金（未選択=全件）",
+            options=df["補助金名"].tolist(),
+            default=[],
+        )
+        submitted = st.form_submit_button("✉️ メール通知を設定する")
+        if submitted:
+            names = target_subsidies if target_subsidies else df["補助金名"].tolist()
+            body_lines = [f"【秋田県ダッシュボード】補助金申請期限アラート設定完了\n"]
+            body_lines.append(f"通知タイミング: 締切の {alert_days} 日前\n")
+            body_lines.append("対象補助金:\n")
+            for n in names:
+                row = df[df["補助金名"] == n].iloc[0]
+                body_lines.append(f"  ・{n}（締切: {row['申請締切']}）")
+            body_lines.append(f"\n毎月1日の自動チェック時に期限間近の補助金をメールでお知らせします。")
+            st.session_state["gmail_alert_config"] = {
+                "days": alert_days, "subsidies": names, "body": "\n".join(body_lines)
+            }
+            st.success(f"✅ 設定を保存しました。締切 {alert_days} 日前にメール通知します（次回の月次更新から有効）。")
+            st.code("\n".join(body_lines), language=None)
+
+    # Excel出力
+    st.markdown("---")
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df_f.drop(columns=["残り日数"]).to_excel(writer, sheet_name="補助金一覧", index=False)
+    st.download_button(
+        "📥 補助金一覧をExcelダウンロード",
+        buffer.getvalue(),
+        "akita_subsidies.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+# ============================================================
 # ルーティング
 # ============================================================
 if page == "📊 総合概要":
@@ -1095,5 +1350,9 @@ elif page == "⚡ 再生可能エネルギー":
     page_renewable()
 elif page == "🏛️ 政策提言":
     page_policy()
+elif page == "📚 事例研究DB":
+    page_cases()
+elif page == "💴 補助金カレンダー":
+    page_subsidies()
 elif page == "📝 施策メモ":
     page_notes()

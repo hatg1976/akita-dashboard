@@ -684,7 +684,7 @@ def page_shotengai():
             elif val == "中":
                 return "background-color: #ffeb9c; color: #9c5700"
             return ""
-        styled = df_cases.style.applymap(highlight_applicability, subset=["秋田への適用可能性"])
+        styled = df_cases.style.map(highlight_applicability, subset=["秋田への適用可能性"])
         st.dataframe(styled, use_container_width=True, height=250)
 
     with tab2:
@@ -823,8 +823,8 @@ def page_policy():
             return "background-color:#dce6f1" if val == "中小企業診断士" else \
                    "background-color:#fce4d6"
         styled = (df_filtered.style
-                  .applymap(color_priority, subset=["優先度"])
-                  .applymap(color_subject, subset=["主な提言主体"]))
+                  .map(color_priority, subset=["優先度"])
+                  .map(color_subject, subset=["主な提言主体"]))
         st.dataframe(styled, use_container_width=True, height=320)
 
         # 凡例
@@ -1263,8 +1263,8 @@ def page_subsidies():
                 ))
             except Exception:
                 pass
-        fig.add_vline(x=datetime.combine(today, datetime.min.time()),
-                      line_dash="dash", line_color="red", annotation_text="今日")
+        fig.add_vline(x=datetime.combine(date.today(), datetime.min.time()),
+                      line_dash="dash", line_color="red", annotation=None)
         fig.update_layout(height=380, xaxis_title="期間", yaxis_title="",
                           margin=dict(l=10, r=10))
         st.plotly_chart(fig, use_container_width=True)

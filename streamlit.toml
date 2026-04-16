@@ -1,0 +1,2 @@
+[app]
+entryPoint = "akita_dashboard/app.py"

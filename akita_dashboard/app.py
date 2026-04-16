@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import io
 
-from collector import (
+from .collector import (
     get_sample_population,
     get_sample_migration,
     get_sample_industry,

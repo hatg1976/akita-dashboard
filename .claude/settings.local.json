@@ -6,7 +6,8 @@
       "Bash(powershell -Command \"New-Item -ItemType Junction -Path ''C:\\\\Users\\\\USER\\\\.claude\\\\projects\\\\C--Users-USER--------claude-code\\\\memory'' -Target ''C:\\\\Users\\\\USER\\\\マイドライブ\\\\claude\\\\memory''\")",
       "Bash(cmd.exe /c \"where claude 2>nul\")",
       "Bash(cmd.exe /c \"where claude\")",
-      "Bash(echo \"exit: $?\")"
+      "Bash(echo \"exit: $?\")",
+      "Bash(pip install *)"
     ]
   }
 }

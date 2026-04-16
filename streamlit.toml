@@ -1,2 +1,5 @@
-[app]
-entryPoint = "akita_dashboard/app.py"
+[client]
+showErrorDetails = true
+
+[server]
+headless = true

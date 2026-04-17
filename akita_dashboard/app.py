@@ -35,6 +35,7 @@ from collector import (
     get_roadmap,
     get_case_studies,
     get_subsidies,
+    get_industry_companies,
 )
 
 # ページ設定
@@ -73,7 +74,8 @@ page = st.sidebar.selectbox(
     "表示するデータ",
     ["📊 総合概要", "👥 人口動態", "🏭 産業構造", "💰 経済指標", "🏘️ 市町村比較",
      "🍱 食品製造業", "🏪 商店街", "⚡ 再生可能エネルギー",
-     "🏛️ 政策提言", "📚 事例研究DB", "💴 補助金カレンダー", "📝 施策メモ"],
+     "🏛️ 政策提言", "📚 事例研究DB", "💴 補助金カレンダー",
+     "🏢 業界団体・主要企業", "📝 施策メモ"],
 )
 
 st.sidebar.markdown("---")
@@ -1342,6 +1344,99 @@ def page_subsidies():
 
 
 # ============================================================
+# 業界団体・主要企業ページ
+# ============================================================
+def page_companies():
+    st.title("🏢 業界団体・主要企業データベース")
+    st.caption("秋田県の業界団体別トップ3企業一覧（中小企業診断士向け支援先リスト）")
+    st.warning("⚠️ 本データはAI学習情報（2025年時点）に基づきます。最新情報は各団体・企業へ直接ご確認ください。")
+    st.markdown("---")
+
+    df = get_industry_companies()
+
+    # ---- フィルター ----
+    col1, col2 = st.columns(2)
+    with col1:
+        sel_dan = st.multiselect(
+            "業界団体で絞り込み",
+            options=df["業界団体"].unique().tolist(),
+            default=[],
+        )
+    with col2:
+        sel_size = st.multiselect(
+            "従業員規模",
+            options=["大（300人以上）", "中（50〜300人）", "小（〜50人）"],
+            default=["大（300人以上）", "中（50〜300人）", "小（〜50人）"],
+        )
+
+    df_f = df.copy()
+    if sel_dan:
+        df_f = df_f[df_f["業界団体"].isin(sel_dan)]
+    if sel_size:
+        df_f = df_f[df_f["従業員規模"].isin(sel_size)]
+
+    # ---- 業界別カード表示 ----
+    for dan in df_f["業界団体"].unique():
+        df_d = df_f[df_f["業界団体"] == dan].sort_values("順位")
+        with st.expander(f"**{dan}**（{len(df_d)}社）", expanded=True):
+            cols = st.columns(3)
+            for i, (_, row) in enumerate(df_d.iterrows()):
+                medal = ["🥇", "🥈", "🥉"][min(i, 2)]
+                with cols[i % 3]:
+                    st.markdown(f"{medal} **{row['企業名']}**")
+                    st.caption(f"📍 {row['所在地']} ／ {row['従業員規模']}")
+                    st.caption(f"🏷️ {row['主要製品・サービス']}")
+                    st.info(f"💡 {row['診断士関与の観点']}", icon=None)
+
+    st.markdown("---")
+
+    # ---- 業界別企業数・規模グラフ ----
+    st.subheader("業界別 従業員規模の構成")
+    size_df = df_f.groupby(["業界団体", "従業員規模"]).size().reset_index(name="社数")
+    # 業界名を短縮
+    size_df["業界（短）"] = size_df["業界団体"].str.replace("秋田県", "").str.replace("生活衛生同業組合", "").str.replace("連合会", "").str[:12]
+    fig = px.bar(
+        size_df, x="業界（短）", y="社数",
+        color="従業員規模",
+        color_discrete_map={
+            "大（300人以上）": "#1f4e79",
+            "中（50〜300人）": "#2ca02c",
+            "小（〜50人）": "#ff7f0e",
+        },
+        title="業界別・規模別企業構成",
+        text="社数",
+    )
+    fig.update_layout(height=380, xaxis_tickangle=-30)
+    st.plotly_chart(fig, use_container_width=True)
+
+    # ---- 診断士アクション候補 ----
+    st.markdown("---")
+    st.subheader("診断士として関与できる主要企業")
+    keyword = st.text_input("🔍 関与観点で検索", placeholder="例: 事業承継, DX, 輸出, ブランド")
+    if keyword:
+        df_kw = df_f[df_f["診断士関与の観点"].str.contains(keyword, case=False, na=False)]
+        if not df_kw.empty:
+            st.dataframe(
+                df_kw[["業界団体", "企業名", "所在地", "主要製品・サービス", "診断士関与の観点"]],
+                use_container_width=True, hide_index=True,
+            )
+        else:
+            st.info(f"「{keyword}」に該当する企業は見つかりませんでした")
+
+    # ---- データ編集・エクスポート ----
+    st.markdown("---")
+    st.subheader("データの修正・追加")
+    st.markdown("企業情報の誤りや追加がある場合は、下記のCSVをダウンロードして修正後、開発者にお知らせください。")
+    csv = df.to_csv(index=False, encoding="utf-8-sig")
+    st.download_button(
+        "📥 企業データCSVダウンロード",
+        csv,
+        "akita_companies.csv",
+        "text/csv",
+    )
+
+
+# ============================================================
 # ルーティング
 # ============================================================
 if page == "📊 総合概要":
@@ -1366,5 +1461,7 @@ elif page == "📚 事例研究DB":
     page_cases()
 elif page == "💴 補助金カレンダー":
     page_subsidies()
+elif page == "🏢 業界団体・主要企業":
+    page_companies()
 elif page == "📝 施策メモ":
     page_notes()

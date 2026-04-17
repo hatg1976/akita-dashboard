@@ -436,10 +436,18 @@ def page_notes():
         placeholder="例：秋田市内の空き店舗率が高い。移住者向けチャレンジショップ制度の活用事例を調査する...",
     )
     if st.button("メモを保存"):
-        with open("data/memo.txt", "a", encoding="utf-8") as f:
-            from datetime import datetime
-            f.write(f"\n\n--- {datetime.now().strftime('%Y-%m-%d %H:%M')} ---\n{memo}")
-        st.success("メモを保存しました（data/memo.txt）")
+        from datetime import datetime
+        if "memo_log" not in st.session_state:
+            st.session_state["memo_log"] = []
+        st.session_state["memo_log"].append(
+            f"--- {datetime.now().strftime('%Y-%m-%d %H:%M')} ---\n{memo}"
+        )
+        st.success("メモを保存しました（このセッション中有効）")
+
+    if st.session_state.get("memo_log"):
+        st.markdown("**保存済みメモ**")
+        for m in reversed(st.session_state["memo_log"]):
+            st.text(m)
 
     # Excel出力
     st.markdown("---")

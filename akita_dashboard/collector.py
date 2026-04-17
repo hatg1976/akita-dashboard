@@ -10,7 +10,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-ESTAT_API_KEY = os.getenv("ESTAT_API_KEY", "")
+# Streamlit Cloud の Secrets または .env ファイルからAPIキーを取得
+def _get_api_key() -> str:
+    try:
+        import streamlit as st
+        return st.secrets.get("ESTAT_API_KEY", os.getenv("ESTAT_API_KEY", ""))
+    except Exception:
+        return os.getenv("ESTAT_API_KEY", "")
+
+ESTAT_API_KEY = _get_api_key()
 ESTAT_BASE_URL = "https://api.e-stat.go.jp/rest/3.0/app/json"
 
 # 秋田県コード

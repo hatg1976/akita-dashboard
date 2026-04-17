@@ -1,9 +1,8 @@
 import sys
-import os
 from pathlib import Path
 
-# akita_dashboard のディレクトリをパスに追加
-sys.path.insert(0, str(Path(__file__).parent))
+# akita_dashboard をパスに追加
+sys.path.insert(0, str(Path(__file__).parent / "akita_dashboard"))
 
-# app.py を実行
-exec(open(os.path.join(os.path.dirname(__file__), 'akita_dashboard', 'app.py')).read())
+# アプリを実行
+from app import *

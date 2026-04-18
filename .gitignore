@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# 環境変数・機密情報
+.env
+.env.local
+akita_dashboard/.streamlit/secrets.toml
+
+# Streamlit
+.streamlit/secrets.toml
+
+# データファイル（自動生成）
+akita_dashboard/data/*.json
+akita_dashboard/data/*.csv
+akita_dashboard/data/*.xlsx
+akita_dashboard/data/last_updated.txt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

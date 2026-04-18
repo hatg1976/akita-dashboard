@@ -8,7 +8,8 @@
       "Bash(python -c \"import app\")",
       "Skill(schedule)",
       "Skill(schedule:*)",
-      "Bash(python -c \"import collector; import app; print\\('OK'\\)\")"
+      "Bash(python -c \"import collector; import app; print\\('OK'\\)\")",
+      "Bash(python -c \"import app; print\\('OK'\\)\")"
     ]
   }
 }

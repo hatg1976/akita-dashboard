@@ -1,0 +1,48 @@
+name: 月次 e-Stat データ自動更新
+
+on:
+  schedule:
+    # 毎月1日 0:00 UTC = 9:00 JST
+    - cron: '0 0 1 * *'
+  # 手動実行ボタンも追加
+  workflow_dispatch:
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: リポジトリをチェックアウト
+        uses: actions/checkout@v4
+
+      - name: Python 3.11 をセットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 依存パッケージをインストール
+        run: pip install requests pandas python-dotenv
+
+      - name: e-Stat データを取得・保存
+        env:
+          ESTAT_API_KEY: ${{ secrets.ESTAT_API_KEY }}
+        run: python fetch_estat_data.py
+
+      - name: 取得データをコミット
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/estat_cache/
+          git diff --cached --quiet && echo "変更なし（スキップ）" || \
+            git commit -m "🔄 月次 e-Stat データ更新 $(date +%Y-%m-%d)"
+
+      - name: GitHub にプッシュ
+        run: git push origin main
+
+      - name: Hugging Face Spaces にプッシュ
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git push \
+            https://HIDEAKITANIGUCHI:$HF_TOKEN@huggingface.co/spaces/HIDEAKITANIGUCHI/akita-dashboard \
+            main

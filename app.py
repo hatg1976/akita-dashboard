@@ -46,6 +46,45 @@ def _load_population_real(area_code: str):
     return estat_api.fetch_formatted_population_trend(area_code)
 
 
+def _get_population(area_code: str) -> tuple[pd.DataFrame, str, str]:
+    """
+    人口データを取得する（優先順位: キャッシュ → 実API → サンプル）
+
+    Returns:
+        (df, source_label, fetched_at)
+        fetched_at: "YYYY-MM-DD" 取得日（サンプルは空文字）
+    """
+    # 1. ローカルキャッシュ（GitHub Actions による月次更新）
+    df, fetched_at = estat_api.load_cached_population(area_code)
+    if not df.empty:
+        return df, "e-Stat 人口推計", fetched_at
+
+    # 2. 実API（APIキー設定済みの場合）
+    if estat_api.is_api_key_set():
+        try:
+            df, source = _load_population_real(area_code)
+            if not df.empty:
+                from datetime import date
+                return df, source, date.today().isoformat()
+        except Exception:
+            pass
+
+    # 3. サンプルデータ（秋田県のみ対応）
+    return get_sample_population(), "サンプルデータ", ""
+
+
+def _fmt_date(iso_date: str) -> str:
+    """'2024-01-01' → '2024年1月1日' に変換する"""
+    if not iso_date:
+        return ""
+    try:
+        from datetime import date
+        d = date.fromisoformat(iso_date)
+        return f"{d.year}年{d.month}月{d.day}日"
+    except Exception:
+        return iso_date
+
+
 # ページ設定
 st.set_page_config(
     page_title="秋田県経済データダッシュボード",
@@ -108,10 +147,21 @@ def page_overview():
     st.markdown("中小企業診断士による施策提言のための基礎データ集")
     st.markdown("---")
 
-    # KPIカード
+    # KPIカード（人口はキャッシュ or サンプルから取得）
+    _ov_df, _ov_source, _ov_fetched = _get_population(estat_api.AKITA_AREA_CODE)
+    if not _ov_df.empty:
+        _latest = _ov_df.sort_values("年").iloc[-1]
+        _pop_val  = f"{_latest['総人口（万人）']}万人"
+        _pop_year = f"（{int(_latest['年'])}年推計）"
+        _pop_delta_note = f"出典: {_ov_source}" + (f" | 取得: {_fmt_date(_ov_fetched)}" if _ov_fetched else "")
+    else:
+        _pop_val, _pop_year, _pop_delta_note = "92.0万人", "（2023年推計）", "サンプルデータ"
+
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("総人口", "92.0万人", delta="-3.9万人（5年間）", delta_color="inverse")
+        st.metric("総人口" + _pop_year, _pop_val, delta="-3.9万人（5年間）", delta_color="inverse")
+        if _ov_fetched:
+            st.caption(_pop_delta_note)
     with col2:
         st.metric("高齢化率", "38.8%", delta="+2.1pt（5年間）", delta_color="inverse")
     with col3:
@@ -165,26 +215,36 @@ def page_population():
     st.title("👥 人口動態分析")
     st.markdown("---")
 
-    # e-Stat 実データ取得（APIキー設定済みの場合）
-    real_source = ""
-    df_pop_real = None
-    if estat_api.is_api_key_set():
-        try:
-            df_pop_real, real_source = _load_population_real(estat_api.AKITA_AREA_CODE)
-        except Exception:
-            df_pop_real = None
-
-    df_pop = get_sample_population()
+    df_pop_real, pop_source, pop_fetched = _get_population(estat_api.AKITA_AREA_CODE)
     df_mig = get_sample_migration()
 
-    # 実データがあれば総人口列を上書き
-    if df_pop_real is not None and not df_pop_real.empty:
-        st.success(f"✅ 人口推計: e-Stat 実データを使用中　{real_source}")
+    # データソース表示
+    if pop_fetched:
+        st.success(
+            f"✅ 人口推計: **{pop_source}** を使用　"
+            f"データ取得日: **{_fmt_date(pop_fetched)}**"
+        )
     else:
         st.info("※ 人口推計はサンプルデータです。「🔌 e-Stat API連携」でAPIキーを設定すると実データに切り替わります。")
 
+    # 実データがある場合は総人口の時系列グラフに使用（他のグラフはサンプルのまま）
+    df_pop = get_sample_population()
+
+    # 実データがある場合は総人口グラフを実データで表示
+    if pop_fetched and not df_pop_real.empty:
+        st.subheader("総人口の推移（e-Stat 実データ）")
+        fig = px.line(
+            df_pop_real, x="年", y="総人口（万人）",
+            markers=True,
+            title=f"秋田県 総人口の推移　（{pop_source} | 取得: {_fmt_date(pop_fetched)}）",
+            color_discrete_sequence=["#1f4e79"],
+        )
+        fig.update_layout(height=320, yaxis_title="万人")
+        st.plotly_chart(fig, use_container_width=True)
+        st.markdown("---")
+
     # 人口構造の推移（積み上げ面グラフ）
-    st.subheader("人口構造の変化")
+    st.subheader("人口構造の変化（年齢3区分）")
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=df_pop["年"], y=df_pop["老年人口（万人）"],
@@ -1371,6 +1431,13 @@ def page_tohoku():
     st.caption("青森・岩手・秋田・山形の主要指標を比較し、秋田の強みと課題を浮き彫りにする")
     st.markdown("---")
 
+    # キャッシュ更新日の表示
+    cache_updated = estat_api.get_cache_last_updated()
+    if cache_updated:
+        st.success(f"✅ 人口データ: e-Stat 実データ（毎月1日自動更新）　最終更新: **{_fmt_date(cache_updated)}**")
+    else:
+        st.info("※ 人口推移グラフはサンプルデータです。GitHub Actions による月次更新後に実データに切り替わります。")
+
     tab1, tab2, tab3, tab4 = st.tabs([
         "👥 人口動態比較", "💰 経済指標比較", "🏭 産業構造比較", "🏆 総合評価"
     ])
@@ -1393,17 +1460,28 @@ def page_tohoku():
         col_l, col_r = st.columns(2)
 
         with col_l:
-            st.subheader("総人口の推移（万人）")
+            # キャッシュがあれば実データで上書き
+            area_map = {"青森県": "02000", "岩手県": "03000", "秋田県": "05000", "山形県": "06000"}
             fig = go.Figure()
             for pref, color in zip(prefs, TOHOKU_COLORS):
                 lw = 3 if pref == "秋田県" else 1.5
                 dash = "solid" if pref == "秋田県" else "dot"
+                df_c, fa = estat_api.load_cached_population(area_map[pref])
+                if not df_c.empty:
+                    x_vals, y_vals = df_c["年"], df_c["総人口（万人）"]
+                else:
+                    x_vals, y_vals = df_trend["年"], df_trend[pref]
                 fig.add_trace(go.Scatter(
-                    x=df_trend["年"], y=df_trend[pref],
+                    x=x_vals, y=y_vals,
                     name=pref, mode="lines+markers",
                     line=dict(color=color, width=lw, dash=dash),
                 ))
-            fig.update_layout(height=360, yaxis_title="万人", legend=dict(orientation="h"))
+            src_note = f"（e-Stat 実データ | {_fmt_date(cache_updated)}）" if cache_updated else "（サンプルデータ）"
+            fig.update_layout(
+                title=f"総人口の推移（万人）{src_note}",
+                height=360, yaxis_title="万人",
+                legend=dict(orientation="h"),
+            )
             st.plotly_chart(fig, use_container_width=True)
 
         with col_r:

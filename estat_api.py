@@ -299,6 +299,55 @@ def get_stats_meta(stats_data_id: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# ローカルキャッシュ読み込み（GitHub Actions が毎月更新）
+# ---------------------------------------------------------------------------
+
+def load_cached_population(area_code: str) -> tuple[pd.DataFrame, str]:
+    """
+    data/estat_cache/population_{area_code}.json からキャッシュデータを読み込む
+
+    Returns:
+        (df, fetched_at)
+        df columns: 年, 総人口（万人）
+        fetched_at: "YYYY-MM-DD" 形式の取得日（ファイルがなければ空文字）
+    """
+    from pathlib import Path
+    import json
+
+    cache_path = (
+        Path(__file__).parent / "data" / "estat_cache" / f"population_{area_code}.json"
+    )
+    if not cache_path.exists():
+        return pd.DataFrame(), ""
+
+    try:
+        cache = json.loads(cache_path.read_text(encoding="utf-8"))
+        df = pd.DataFrame(cache["data"])
+        fetched_at = cache.get("fetched_at", "")
+        return df, fetched_at
+    except Exception:
+        return pd.DataFrame(), ""
+
+
+def get_cache_last_updated() -> str:
+    """
+    data/estat_cache/last_updated.json の更新日を返す
+    ファイルがなければ空文字を返す
+    """
+    from pathlib import Path
+    import json
+
+    manifest_path = Path(__file__).parent / "data" / "estat_cache" / "last_updated.json"
+    if not manifest_path.exists():
+        return ""
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        return manifest.get("last_updated", "")
+    except Exception:
+        return ""
+
+
+# ---------------------------------------------------------------------------
 # 東北4県比較・人口実データ取得
 # ---------------------------------------------------------------------------
 

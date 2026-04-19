@@ -34,20 +34,25 @@ jobs:
       - name: 依存パッケージをインストール
         run: pip install requests pandas python-dotenv
 
-      - name: e-Stat データを取得・保存
+      - name: e-Stat データを取得・保存（人口推計）
         env:
           ESTAT_API_KEY: ${{ secrets.ESTAT_API_KEY }}
         run: python fetch_estat_data.py
+
+      - name: 政策KPIデータを更新（社会増減・last_updated）
+        env:
+          ESTAT_API_KEY: ${{ secrets.ESTAT_API_KEY }}
+        run: python fetch_policy_data.py
 
       - name: 取得データをコミット＆プッシュ（GitHub）
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/estat_cache/
+          git add data/estat_cache/ data/policy_cache/
           if git diff --cached --quiet; then
             echo "変更なし（スキップ）"
           else
-            git commit -m "🔄 月次 e-Stat データ更新 $(date +%Y-%m-%d)"
+            git commit -m "🔄 月次データ自動更新 $(date +%Y-%m-%d)（人口推計・政策KPI）"
             git push origin main
           fi
 

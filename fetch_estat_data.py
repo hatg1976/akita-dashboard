@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from dotenv import load_dotenv
 load_dotenv()
 
-from estat_api import fetch_formatted_population_trend, TOHOKU_PREFS
+from estat_api import fetch_formatted_population_trend, fetch_stats_data, TOHOKU_PREFS
 
 OUTPUT_DIR = Path(__file__).parent / "data" / "estat_cache"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -48,6 +48,20 @@ def fetch_all():
             json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
         )
         return
+
+    # 最初の1県でデバッグ用の時間メタを確認
+    first_area = list(TOHOKU_PREFS.keys())[0]
+    try:
+        _df_debug, _meta_debug = fetch_stats_data("0003448237", area_code=first_area, limit=5)
+        time_meta = _meta_debug.get("time", {})
+        if time_meta:
+            print(f"\n[DEBUG] 時間コード → ラベル（最初の5件）:")
+            for k, v in list(time_meta.items())[:5]:
+                print(f"  {k!r} → {v!r}")
+        else:
+            print(f"\n[DEBUG] time メタなし。利用可能なメタキー: {list(_meta_debug.keys())}")
+    except Exception as e:
+        print(f"[DEBUG] メタ確認エラー: {e}")
 
     for area_code, pref_name in TOHOKU_PREFS.items():
         print(f"\n--- {pref_name} ({area_code}) を取得中 ---")

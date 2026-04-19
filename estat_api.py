@@ -137,6 +137,33 @@ def _normalize_value(val) -> str:
     return str(val) if val is not None else ""
 
 
+def _parse_year_from_label(label) -> Optional[int]:
+    """
+    e-Stat の時間ラベルから西暦4桁を取得する
+
+    対応フォーマット例:
+      "2020年"               → 2020
+      "令和2年（2020）"      → 2020
+      "2020100000"           → 2020
+      "1301"（コードのみ）   → None（ラベルがある場合はそちらを使うこと）
+    """
+    import re
+    try:
+        s = str(label).strip()
+        # 19xx または 20xx の4桁を探す
+        m = re.search(r'((?:19|20)\d{2})', s)
+        if m:
+            return int(m.group(1))
+        # フォールバック: 先頭4桁が妥当な西暦か
+        if len(s) >= 4:
+            year = int(s[:4])
+            if 1990 <= year <= 2100:
+                return year
+        return None
+    except Exception:
+        return None
+
+
 # ---------------------------------------------------------------------------
 # 公開 API 関数
 # ---------------------------------------------------------------------------
@@ -400,13 +427,14 @@ def fetch_formatted_population_trend(
     if df_work.empty:
         return pd.DataFrame(), ""
 
-    def _parse_year(t: str) -> Optional[int]:
-        try:
-            return int(str(t)[:4])
-        except Exception:
-            return None
+    # time コードを CLASS_INF のラベルに変換してから西暦年を取得する
+    # 例: "1301" → meta["time"]["1301"] = "2022年（令和4年）" → 2022
+    time_meta = meta.get("time", {})
+    def _decode_year(code) -> Optional[int]:
+        label = time_meta.get(str(code), str(code))  # ラベルがあれば使う
+        return _parse_year_from_label(label)
 
-    df_work["年"] = df_work["time"].apply(_parse_year)
+    df_work["年"] = df_work["time"].apply(_decode_year)
     # e-Statの人口推計は「千人」単位の場合と「人」単位がある
     # valueが1億未満かつ10万以上なら「人」単位と判断
     max_val = df_work["value"].max()

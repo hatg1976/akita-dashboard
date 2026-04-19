@@ -807,8 +807,6 @@ def page_policy():
             df_chart,
             x="難易度_数値",
             y="期待効果_億円",
-            size="優先度_サイズ",
-            size_max=25,
             color="分野",
             text="提言ID",
             hover_name="提言タイトル",
@@ -818,10 +816,9 @@ def page_policy():
             labels={"難易度_数値": "難易度（低→高）", "期待効果_億円": "期待効果（億円/年）"},
             color_discrete_sequence=px.colors.qualitative.Set2,
         )
-        fig.update_layout(yaxis_range=[0, 70])
-        fig.update_traces(textposition="top center", marker=dict(opacity=0.85))
+        fig.update_layout(height=420, yaxis_range=[0, 70])
+        fig.update_traces(marker=dict(size=18, opacity=0.85), textposition="top center")
         fig.update_xaxes(tickvals=[1, 2, 3], ticktext=["低", "中", "高"])
-        fig.update_layout(height=420)
         st.plotly_chart(fig, use_container_width=True)
 
         # テーブル（色付き）

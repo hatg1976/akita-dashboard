@@ -296,3 +296,107 @@ def get_stats_meta(stats_data_id: str) -> dict:
         "survey_date": str(table_inf.get("SURVEY_DATE", "")),
         "total_count": stat_data.get("RESULT_INF", {}).get("TOTAL_NUMBER", "?"),
     }
+
+
+# ---------------------------------------------------------------------------
+# 東北4県比較・人口実データ取得
+# ---------------------------------------------------------------------------
+
+# 東北4県のe-Stat地域コードと名称
+TOHOKU_PREFS: dict[str, str] = {
+    "02000": "青森県",
+    "03000": "岩手県",
+    "05000": "秋田県",
+    "06000": "山形県",
+}
+
+
+def fetch_formatted_population_trend(
+    area_code: str = AKITA_AREA_CODE,
+) -> tuple[pd.DataFrame, str]:
+    """
+    人口推計（statsDataId: 0003448237）から年次人口推移を取得・整形する
+
+    Returns:
+        (df, source_label)
+        df columns: 年, 総人口（万人）
+        source_label: データ出典の文字列
+    """
+    from datetime import date as _date
+
+    df, meta = fetch_stats_data(
+        stats_data_id="0003448237",
+        area_code=area_code,
+        limit=200,
+    )
+
+    if df.empty or "time" not in df.columns or "value" not in df.columns:
+        return pd.DataFrame(), ""
+
+    # cat01 から「総人口」コードを特定
+    cat01_map = meta.get("cat01", {})
+    total_code = None
+    for code, name in cat01_map.items():
+        if "総人口" in name:
+            total_code = code
+            break
+    # 見つからない場合は最初のコードを使用
+    if total_code is None and cat01_map:
+        total_code = list(cat01_map.keys())[0]
+
+    df_work = df.copy()
+    if "cat01" in df_work.columns and total_code:
+        df_work = df_work[df_work["cat01"] == total_code]
+
+    if df_work.empty:
+        return pd.DataFrame(), ""
+
+    def _parse_year(t: str) -> Optional[int]:
+        try:
+            return int(str(t)[:4])
+        except Exception:
+            return None
+
+    df_work["年"] = df_work["time"].apply(_parse_year)
+    # e-Statの人口推計は「千人」単位の場合と「人」単位がある
+    # valueが1億未満かつ10万以上なら「人」単位と判断
+    max_val = df_work["value"].max()
+    if max_val > 100_000:
+        df_work["総人口（万人）"] = (df_work["value"] / 10_000).round(1)
+    else:
+        df_work["総人口（万人）"] = (df_work["value"] / 10).round(1)  # 千人→万人
+
+    df_result = (
+        df_work[["年", "総人口（万人）"]]
+        .dropna()
+        .drop_duplicates("年")
+        .sort_values("年")
+        .reset_index(drop=True)
+    )
+
+    source = f"e-Stat 人口推計（最終取得: {_date.today().strftime('%Y-%m-%d')}）"
+    return df_result, source
+
+
+def fetch_tohoku_population_latest() -> pd.DataFrame:
+    """
+    東北4県の直近人口・高齢化率を e-Stat から取得する
+    取得できない場合は空DataFrameを返す
+
+    Returns:
+        DataFrame columns: 都道府県, 総人口（万人）, 取得年
+    """
+    rows = []
+    for area_code, pref_name in TOHOKU_PREFS.items():
+        try:
+            df, _ = fetch_formatted_population_trend(area_code)
+            if not df.empty:
+                latest = df.sort_values("年").iloc[-1]
+                rows.append({
+                    "都道府県": pref_name,
+                    "総人口（万人）": latest["総人口（万人）"],
+                    "取得年": int(latest["年"]),
+                })
+        except Exception:
+            continue
+    return pd.DataFrame(rows)

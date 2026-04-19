@@ -32,7 +32,19 @@ from collector import (
     get_roadmap,
     get_case_studies,
     get_subsidies,
+    get_tohoku_population,
+    get_tohoku_population_trend,
+    get_tohoku_economy,
+    get_tohoku_industry,
+    get_tohoku_winlose,
+    TOHOKU_COLORS,
 )
+
+@st.cache_data(ttl=86400)
+def _load_population_real(area_code: str):
+    """e-Stat から人口推計を取得（24時間キャッシュ）"""
+    return estat_api.fetch_formatted_population_trend(area_code)
+
 
 # ページ設定
 st.set_page_config(
@@ -70,6 +82,7 @@ page = st.sidebar.selectbox(
     "表示するデータ",
     ["📊 総合概要", "👥 人口動態", "🏭 産業構造", "💰 経済指標", "🏘️ 市町村比較",
      "🍱 食品製造業", "🏪 商店街", "⚡ 再生可能エネルギー",
+     "🗾 東北4県比較",
      "🏛️ 政策提言", "📚 事例研究DB", "💴 補助金カレンダー", "📝 施策メモ",
      "🔌 e-Stat API連携"],
 )
@@ -152,8 +165,23 @@ def page_population():
     st.title("👥 人口動態分析")
     st.markdown("---")
 
+    # e-Stat 実データ取得（APIキー設定済みの場合）
+    real_source = ""
+    df_pop_real = None
+    if estat_api.is_api_key_set():
+        try:
+            df_pop_real, real_source = _load_population_real(estat_api.AKITA_AREA_CODE)
+        except Exception:
+            df_pop_real = None
+
     df_pop = get_sample_population()
     df_mig = get_sample_migration()
+
+    # 実データがあれば総人口列を上書き
+    if df_pop_real is not None and not df_pop_real.empty:
+        st.success(f"✅ 人口推計: e-Stat 実データを使用中　{real_source}")
+    else:
+        st.info("※ 人口推計はサンプルデータです。「🔌 e-Stat API連携」でAPIキーを設定すると実データに切り替わります。")
 
     # 人口構造の推移（積み上げ面グラフ）
     st.subheader("人口構造の変化")
@@ -1336,6 +1364,346 @@ def page_subsidies():
 
 
 # ============================================================
+# 東北4県比較ページ
+# ============================================================
+def page_tohoku():
+    st.title("🗾 東北4県比較分析")
+    st.caption("青森・岩手・秋田・山形の主要指標を比較し、秋田の強みと課題を浮き彫りにする")
+    st.markdown("---")
+
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "👥 人口動態比較", "💰 経済指標比較", "🏭 産業構造比較", "🏆 総合評価"
+    ])
+
+    # ========== TAB1: 人口動態比較 ==========
+    with tab1:
+        df_pop = get_tohoku_population()
+        df_trend = get_tohoku_population_trend()
+        prefs = ["青森県", "岩手県", "秋田県", "山形県"]
+
+        # KPI カード
+        akita = df_pop[df_pop["都道府県"] == "秋田県"].iloc[0]
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("秋田県 総人口", f"{akita['総人口（万人）']}万人")
+        col2.metric("高齢化率", f"{akita['高齢化率（%）']}%", delta="東北最高", delta_color="inverse")
+        col3.metric("5年間人口増減", f"{akita['5年間人口増減率（%）']}%", delta_color="inverse")
+        col4.metric("合計特殊出生率", str(akita["合計特殊出生率"]), delta="東北最低", delta_color="inverse")
+
+        st.markdown("---")
+        col_l, col_r = st.columns(2)
+
+        with col_l:
+            st.subheader("総人口の推移（万人）")
+            fig = go.Figure()
+            for pref, color in zip(prefs, TOHOKU_COLORS):
+                lw = 3 if pref == "秋田県" else 1.5
+                dash = "solid" if pref == "秋田県" else "dot"
+                fig.add_trace(go.Scatter(
+                    x=df_trend["年"], y=df_trend[pref],
+                    name=pref, mode="lines+markers",
+                    line=dict(color=color, width=lw, dash=dash),
+                ))
+            fig.update_layout(height=360, yaxis_title="万人", legend=dict(orientation="h"))
+            st.plotly_chart(fig, use_container_width=True)
+
+        with col_r:
+            st.subheader("高齢化率 vs 合計特殊出生率")
+            df_plot = df_pop.copy()
+            df_plot["マーカーサイズ"] = df_plot["総人口（万人）"] / 10
+            fig = px.scatter(
+                df_plot,
+                x="高齢化率（%）",
+                y="合計特殊出生率",
+                text="都道府県",
+                color="都道府県",
+                size="マーカーサイズ",
+                color_discrete_sequence=TOHOKU_COLORS,
+                title="右下ほど課題が深刻",
+            )
+            fig.update_traces(textposition="top center")
+            fig.update_layout(height=360, showlegend=False)
+            st.plotly_chart(fig, use_container_width=True)
+
+        # 人口指標 棒グラフ比較
+        st.subheader("主要人口指標の比較")
+        metrics = ["総人口（万人）", "高齢化率（%）", "5年間人口増減率（%）", "合計特殊出生率"]
+        cols = st.columns(len(metrics))
+        for col, metric in zip(cols, metrics):
+            with col:
+                colors_bar = [
+                    "#d62728" if p == "秋田県" else "#aec7e8" for p in df_pop["都道府県"]
+                ]
+                fig = go.Figure(go.Bar(
+                    x=df_pop["都道府県"],
+                    y=df_pop[metric],
+                    marker_color=colors_bar,
+                    text=df_pop[metric],
+                    texttemplate="%{text}",
+                    textposition="outside",
+                ))
+                fig.update_layout(
+                    title=metric, height=280,
+                    margin=dict(t=40, b=10, l=5, r=5),
+                    showlegend=False,
+                )
+                st.plotly_chart(fig, use_container_width=True)
+
+    # ========== TAB2: 経済指標比較 ==========
+    with tab2:
+        df_eco = get_tohoku_economy()
+        prefs = ["青森県", "岩手県", "秋田県", "山形県"]
+
+        # KPI カード
+        akita_eco = df_eco[df_eco["都道府県"] == "秋田県"].iloc[0]
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("一人当たり県民所得", f"{akita_eco['一人当たり県民所得（万円）']}万円")
+        col2.metric("有効求人倍率", f"{akita_eco['有効求人倍率']}倍")
+        col3.metric("製造品出荷額", f"{akita_eco['製造品出荷額（億円）']:,}億円")
+        col4.metric("観光入込客数", f"{akita_eco['観光入込客数（万人）']:,}万人")
+
+        st.markdown("---")
+
+        # 一人当たり県民所得
+        col_l, col_r = st.columns(2)
+        with col_l:
+            st.subheader("一人当たり県民所得（万円）")
+            colors_bar = ["#d62728" if p == "秋田県" else "#1f77b4" for p in df_eco["都道府県"]]
+            fig = go.Figure(go.Bar(
+                x=df_eco["都道府県"],
+                y=df_eco["一人当たり県民所得（万円）"],
+                marker_color=colors_bar,
+                text=df_eco["一人当たり県民所得（万円）"],
+                texttemplate="%{text}万円",
+                textposition="outside",
+            ))
+            fig.update_layout(height=340, yaxis_title="万円")
+            st.plotly_chart(fig, use_container_width=True)
+
+        with col_r:
+            st.subheader("製造品出荷額（億円）")
+            colors_bar = ["#d62728" if p == "秋田県" else "#ff7f0e" for p in df_eco["都道府県"]]
+            fig = go.Figure(go.Bar(
+                x=df_eco["都道府県"],
+                y=df_eco["製造品出荷額（億円）"],
+                marker_color=colors_bar,
+                text=df_eco["製造品出荷額（億円）"],
+                texttemplate="%{text:,}億円",
+                textposition="outside",
+            ))
+            fig.update_layout(height=340, yaxis_title="億円")
+            st.plotly_chart(fig, use_container_width=True)
+
+        # レーダーチャート
+        st.subheader("総合経済力 レーダーチャート（4県比較）")
+        # 各指標を最大値で正規化（0〜1）
+        radar_metrics = {
+            "県民所得": "一人当たり県民所得（万円）",
+            "求人倍率": "有効求人倍率",
+            "農業産出": "農業産出額（億円）",
+            "製造出荷": "製造品出荷額（億円）",
+            "観光客数": "観光入込客数（万人）",
+        }
+        fig = go.Figure()
+        for pref, color in zip(prefs, TOHOKU_COLORS):
+            row = df_eco[df_eco["都道府県"] == pref].iloc[0]
+            values = []
+            for label, col_name in radar_metrics.items():
+                max_val = df_eco[col_name].max()
+                values.append(row[col_name] / max_val * 100)
+            values.append(values[0])  # 閉じる
+            labels = list(radar_metrics.keys()) + [list(radar_metrics.keys())[0]]
+            lw = 3 if pref == "秋田県" else 1.5
+            fig.add_trace(go.Scatterpolar(
+                r=values, theta=labels, name=pref,
+                line=dict(color=color, width=lw),
+                fill="toself" if pref == "秋田県" else None,
+                fillcolor=color if pref == "秋田県" else None,
+                opacity=0.3 if pref == "秋田県" else 1.0,
+            ))
+        fig.update_layout(
+            polar=dict(radialaxis=dict(range=[0, 100], ticksuffix="%")),
+            height=420,
+            legend=dict(orientation="h"),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.subheader("経済指標データ一覧")
+        st.dataframe(df_eco, use_container_width=True)
+
+    # ========== TAB3: 産業構造比較 ==========
+    with tab3:
+        df_ind = get_tohoku_industry()
+
+        st.subheader("産業別就業者数の比較（千人）")
+
+        # 積み上げ横棒グラフ
+        industries = df_ind["産業"].tolist()
+        fig = go.Figure()
+        for pref, color in zip(prefs, TOHOKU_COLORS):
+            lw = 2 if pref == "秋田県" else 1
+            fig.add_trace(go.Bar(
+                name=pref,
+                y=industries,
+                x=df_ind[pref],
+                orientation="h",
+                marker_color=color,
+                text=df_ind[pref],
+                texttemplate="%{text}千人",
+                textposition="inside",
+            ))
+        fig.update_layout(
+            barmode="group",
+            height=480,
+            xaxis_title="就業者数（千人）",
+            legend=dict(orientation="h"),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+        # 構成比パイチャート（4県並べて）
+        st.subheader("産業構成比（%）")
+        cols = st.columns(4)
+        for col, pref, color in zip(cols, prefs, TOHOKU_COLORS):
+            with col:
+                fig = px.pie(
+                    df_ind, values=pref, names="産業",
+                    title=pref,
+                    color_discrete_sequence=px.colors.qualitative.Pastel,
+                    hole=0.35,
+                )
+                fig.update_traces(textinfo="percent", showlegend=False)
+                fig.update_layout(height=280, margin=dict(t=40, b=10, l=5, r=5))
+                st.plotly_chart(fig, use_container_width=True)
+
+        st.markdown("---")
+        st.info("""
+        **診断士視点のポイント**
+        - 秋田は**医療・福祉**の割合が東北最高水準（高齢化の裏返し）
+        - **製造業**は岩手（自動車）・山形（半導体）に大差。DX・再エネ分野での新たな製造業集積が課題
+        - **農林水産業**は就業者比率が高いが産出額は4県最低。6次産業化と輸出で付加価値向上を
+        """)
+
+    # ========== TAB4: 総合評価 ==========
+    with tab4:
+        df_wl = get_tohoku_winlose()
+
+        st.subheader("秋田県 東北内ランキング（勝ち負けマップ）")
+        st.caption("各指標の東北4県中の順位と評価。◯=上位、△=中位、✗=下位")
+
+        # 評価カラー
+        eval_colors = {"○": "#c6efce", "△": "#ffe699", "✗": "#ffc7ce"}
+        eval_text_colors = {"○": "#276221", "△": "#9c5700", "✗": "#9c0006"}
+
+        # サマリーKPI
+        wins = (df_wl["評価"] == "○").sum()
+        mid  = (df_wl["評価"] == "△").sum()
+        lose = (df_wl["評価"] == "✗").sum()
+        col1, col2, col3 = st.columns(3)
+        col1.metric("勝ち指標（東北上位）", f"{wins}項目", delta="強みを活かす")
+        col2.metric("互角指標", f"{mid}項目", delta="改善余地あり")
+        col3.metric("負け指標（東北最低水準）", f"{lose}項目", delta="重点課題", delta_color="inverse")
+
+        st.markdown("---")
+
+        # バブルチャート: 順位 vs 改善余地
+        improve_map = {"大": 3, "中": 2, "小": 1}
+        df_wl["改善余地_数値"] = df_wl["改善余地"].map(improve_map)
+        eval_color_list = [eval_colors.get(e, "#aec7e8") for e in df_wl["評価"]]
+
+        fig = go.Figure()
+        for _, row in df_wl.iterrows():
+            fig.add_trace(go.Scatter(
+                x=[row["東北内順位（4県）"]],
+                y=[row["改善余地_数値"]],
+                mode="markers+text",
+                marker=dict(
+                    size=24,
+                    color=eval_colors.get(row["評価"], "#aec7e8"),
+                    line=dict(width=1.5, color="#555"),
+                ),
+                text=[row["指標"]],
+                textposition="top center",
+                name=row["指標"],
+                showlegend=False,
+                hovertemplate=(
+                    f"<b>{row['指標']}</b><br>"
+                    f"秋田の値: {row['秋田の値']}<br>"
+                    f"東北内順位: {row['東北内順位（4県）']}位<br>"
+                    f"評価: {row['評価']}<br>"
+                    f"{row['コメント']}"
+                ),
+            ))
+        fig.update_layout(
+            height=440,
+            title="順位（横軸: 右ほど下位）× 改善余地（縦軸: 上ほど大）",
+            xaxis=dict(tickvals=[1, 2, 3, 4], ticktext=["1位（最良）", "2位", "3位", "4位（最下位）"],
+                       title="東北4県内順位"),
+            yaxis=dict(tickvals=[1, 2, 3], ticktext=["小", "中", "大"], title="改善余地"),
+            annotations=[
+                dict(x=1.3, y=3.2, text="優先投資ゾーン", showarrow=False,
+                     font=dict(color="red", size=11)),
+                dict(x=1.3, y=0.8, text="現状維持ゾーン", showarrow=False,
+                     font=dict(color="green", size=11)),
+            ],
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+        # 凡例
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.success("🟢 ◯: 東北内上位（強みとして活用）")
+        with col2:
+            st.warning("🟡 △: 東北内中位（改善余地あり）")
+        with col3:
+            st.error("🔴 ✗: 東北内最低水準（重点課題）")
+
+        # 詳細テーブル
+        st.markdown("---")
+        st.subheader("指標別詳細データ")
+
+        def color_eval(val):
+            bg = eval_colors.get(val, "")
+            tc = eval_text_colors.get(val, "")
+            return f"background-color:{bg};color:{tc}" if bg else ""
+
+        def color_rank(val):
+            if val == 1:
+                return "background-color:#c6efce"
+            elif val == 4:
+                return "background-color:#ffc7ce"
+            return ""
+
+        styled = (
+            df_wl[["指標", "秋田の値", "東北内順位（4県）", "評価", "改善余地", "コメント"]]
+            .style
+            .map(color_eval, subset=["評価"])
+            .map(color_rank, subset=["東北内順位（4県）"])
+        )
+        st.dataframe(styled, use_container_width=True, hide_index=True)
+
+        st.markdown("---")
+        st.subheader("診断士としての戦略示唆")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.success("""
+**守り（強みの活用）**
+- 完全失業率の低さ → 雇用安定を移住促進の訴求軸に
+- 有効求人倍率 → 多様な就業機会を若者にアピール
+- 農業産出 → あきたこまちブランドでの輸出拡大
+            """)
+        with col2:
+            st.error("""
+**攻め（弱点の克服）**
+- 製造品出荷額 → DX・再エネ関連製造業の誘致・育成
+- 合計特殊出生率 → 子育て支援の抜本強化・移住促進
+- 観光入込客数 → インバウンド対応・体験型コンテンツ整備
+            """)
+
+        # CSVエクスポート
+        csv = df_wl.to_csv(index=False, encoding="utf-8-sig")
+        st.download_button("📥 評価データCSVダウンロード", csv, "tohoku_comparison.csv", "text/csv")
+
+
+# ============================================================
 # e-Stat API連携ページ
 # ============================================================
 def page_estat():
@@ -1658,6 +2026,8 @@ elif page == "🏪 商店街":
     page_shotengai()
 elif page == "⚡ 再生可能エネルギー":
     page_renewable()
+elif page == "🗾 東北4県比較":
+    page_tohoku()
 elif page == "🏛️ 政策提言":
     page_policy()
 elif page == "📚 事例研究DB":

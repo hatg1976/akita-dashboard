@@ -11,6 +11,7 @@ from plotly.subplots import make_subplots
 import io
 
 import estat_api
+import market_data
 from collector import (
     get_sample_population,
     get_sample_migration,
@@ -123,6 +124,7 @@ page = st.sidebar.selectbox(
     ["📊 総合概要", "👥 人口動態", "🏭 産業構造", "💰 経済指標",
      "🔎 業種別分析", "🗾 東北4県比較", "🏘️ 市町村比較",
      "🍱 食品製造業", "🏪 商店街",
+     "📈 地域市場シェア分析",
      "🏛️ 政策提言", "📚 事例研究DB", "💴 補助金カレンダー", "📝 施策メモ",
      "🔌 e-Stat API連携"],
 )
@@ -2187,6 +2189,231 @@ def page_estat():
 
 
 # ============================================================
+# ============================================================
+# 地域市場シェア分析ページ
+# ============================================================
+def page_market_share():
+    from datetime import datetime
+
+    st.title("📈 地域市場シェア分析")
+    st.caption("家計調査（総務省）の1世帯年間支出 × 商圏世帯数で市場規模を推計し、自社売上からシェアを算出します")
+    st.markdown("---")
+
+    st.info(
+        "**使い方**\n\n"
+        "① 商圏エリア（市町村）を選択　② 品目カテゴリ・品目を選択　"
+        "③ 自社の年間売上を入力　→　推計シェアが表示されます\n\n"
+        "⚠️ 市場規模は家計調査の平均値を使った推計です。実際の市場規模とは異なる場合があります。"
+    )
+
+    # ── Step 1: 商圏エリア選択 ──
+    st.subheader("① 商圏エリアを選択")
+    col1, col2 = st.columns([2, 2])
+    with col1:
+        municipalities = market_data.get_municipalities()
+        selected_area = st.selectbox("市町村", municipalities, index=0)
+    with col2:
+        households = market_data.get_households(selected_area)
+        st.metric("世帯数（令和2年国勢調査）", f"{households:,} 世帯")
+
+    st.markdown("---")
+
+    # ── Step 2: 品目選択 ──
+    st.subheader("② 品目を選択")
+    col1, col2 = st.columns(2)
+    with col1:
+        categories = market_data.get_categories()
+        selected_cat = st.selectbox("カテゴリ", categories)
+    with col2:
+        items = market_data.get_items(selected_cat)
+        selected_item = st.selectbox("品目", items)
+
+    exp_data = market_data.get_expenditure(selected_cat, selected_item)
+    if exp_data:
+        st.caption(f"📋 {exp_data.get('説明', '')}")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("全国平均（1世帯/年）", f"¥{exp_data['全国']:,}")
+        c2.metric("東北平均（1世帯/年）", f"¥{exp_data['東北']:,}")
+        c3.metric("秋田推計（1世帯/年）", f"¥{exp_data['秋田']:,}")
+
+    st.markdown("---")
+
+    # ── Step 3: 自社売上入力 ──
+    st.subheader("③ 自社の年間売上を入力")
+    col1, col2 = st.columns([2, 2])
+    with col1:
+        own_sales_man = st.number_input(
+            "年間売上（万円）",
+            min_value=0,
+            max_value=100000,
+            value=0,
+            step=100,
+            help="自社（または店舗・事業所）の当該品目の年間売上を入力してください",
+        )
+    own_sales = own_sales_man * 10000
+
+    st.markdown("---")
+
+    # ── 結果表示 ──
+    st.subheader("④ 推計市場シェア")
+
+    if not exp_data:
+        st.warning("品目データが見つかりません。")
+        return
+
+    # 秋田推計値で市場規模計算
+    market_size = market_data.calc_market_size(exp_data["秋田"], households)
+    market_size_zenkoku = market_data.calc_market_size(exp_data["全国"], households)
+    share = market_data.calc_share(own_sales, market_size) if own_sales > 0 else 0.0
+
+    # KPI表示
+    k1, k2, k3 = st.columns(3)
+    k1.metric(
+        f"推計市場規模（{selected_area}）",
+        f"¥{market_size/10000:,.0f}万円",
+        help="秋田推計単価 × 世帯数",
+    )
+    k2.metric(
+        "自社年間売上",
+        f"¥{own_sales/10000:,.0f}万円" if own_sales > 0 else "未入力",
+    )
+    k3.metric(
+        "推計シェア",
+        f"{share:.2f}%" if own_sales > 0 else "—",
+        help="自社売上 ÷ 推計市場規模",
+    )
+
+    # ゲージチャート
+    if own_sales > 0:
+        gauge_max = max(100, share * 2)
+        fig_gauge = go.Figure(go.Indicator(
+            mode="gauge+number+delta",
+            value=share,
+            number={"suffix": "%", "font": {"size": 36}},
+            delta={"reference": 10, "increasing": {"color": "#2ca02c"}, "suffix": "%"},
+            gauge={
+                "axis": {"range": [0, gauge_max], "ticksuffix": "%"},
+                "bar": {"color": "#1f4e79"},
+                "steps": [
+                    {"range": [0, gauge_max * 0.1], "color": "#ffe0e0"},
+                    {"range": [gauge_max * 0.1, gauge_max * 0.3], "color": "#fff0cc"},
+                    {"range": [gauge_max * 0.3, gauge_max], "color": "#e0ffe0"},
+                ],
+                "threshold": {
+                    "line": {"color": "red", "width": 3},
+                    "thickness": 0.75,
+                    "value": 10,
+                },
+            },
+            title={"text": f"推計市場シェア<br><sub>{selected_area}・{selected_item}</sub>"},
+        ))
+        fig_gauge.update_layout(height=280, margin=dict(t=60, b=20, l=40, r=40))
+        st.plotly_chart(fig_gauge, use_container_width=True)
+
+        # シェア評価コメント
+        if share >= 30:
+            st.success(f"🏆 推計シェア **{share:.1f}%** — 当該商圏で非常に高いシェアです。競合動向の継続監視を。")
+        elif share >= 10:
+            st.info(f"✅ 推計シェア **{share:.1f}%** — 商圏内で一定の存在感があります。さらなる深耕余地があります。")
+        elif share >= 3:
+            st.warning(f"📌 推計シェア **{share:.1f}%** — まだ伸びしろがあります。認知拡大・リピート促進が有効です。")
+        else:
+            st.error(f"⚠️ 推計シェア **{share:.1f}%** — シェアが低い状態です。ターゲット絞り込みや差別化を検討しましょう。")
+
+    st.markdown("---")
+
+    # ── 全国・東北・秋田 市場規模比較 ──
+    st.subheader("市場規模の参考比較（1世帯年間支出）")
+    ref_data = {
+        "エリア": ["全国（平均）", "東北（参考）", "秋田（推計）"],
+        "1世帯年間支出（円）": [exp_data["全国"], exp_data["東北"], exp_data["秋田"]],
+    }
+    fig_bar = px.bar(
+        pd.DataFrame(ref_data),
+        x="エリア", y="1世帯年間支出（円）",
+        color="エリア",
+        color_discrete_sequence=["#aec7e8", "#ff9896", "#1f4e79"],
+        text_auto=True,
+        title=f"{selected_item} の1世帯年間支出比較",
+    )
+    fig_bar.update_traces(texttemplate="¥%{y:,.0f}", textposition="outside")
+    fig_bar.update_layout(height=320, showlegend=False, yaxis_tickprefix="¥", yaxis_tickformat=",")
+    st.plotly_chart(fig_bar, use_container_width=True)
+
+    # ── 購入額の年次推移 ──
+    st.markdown("---")
+    st.subheader("購入額の推移（全国 2019〜2023年）")
+
+    # 品目名の表記ゆれ対応
+    trend_key = selected_item
+    # カッコ・再掲を除いた名前でも試す
+    trend_key_clean = selected_item.replace("（再掲）", "").strip()
+    trend = market_data.get_trend(trend_key) or market_data.get_trend(trend_key_clean)
+
+    if trend:
+        df_trend = pd.DataFrame(trend)
+        fig_trend = px.line(
+            df_trend, x="年", y="支出（円）",
+            markers=True,
+            title=f"{selected_item} — 1世帯年間支出の推移（全国平均）",
+            color_discrete_sequence=["#1f4e79"],
+        )
+        fig_trend.update_traces(line_width=3, marker_size=8)
+        fig_trend.update_layout(
+            height=320,
+            yaxis_tickprefix="¥", yaxis_tickformat=",",
+            xaxis=dict(tickmode="array", tickvals=trend["年"]),
+        )
+        # コロナ影響を注記
+        fig_trend.add_vline(x=2020, line_dash="dash", line_color="gray",
+                            annotation_text="コロナ禍", annotation_position="top right")
+        st.plotly_chart(fig_trend, use_container_width=True)
+
+        # 変化率
+        vals = trend["支出（円）"]
+        chg_5yr = (vals[-1] - vals[0]) / vals[0] * 100
+        chg_1yr = (vals[-1] - vals[-2]) / vals[-2] * 100
+        t1, t2 = st.columns(2)
+        t1.metric("5年間変化率（2019→2023）", f"{chg_5yr:+.1f}%")
+        t2.metric("前年比（2022→2023）", f"{chg_1yr:+.1f}%")
+        st.caption("出典: 総務省 家計調査（二人以上の世帯）。数値は参考値です。")
+    else:
+        st.info("この品目の年次推移データは準備中です。")
+
+    # ── 複数商圏の比較 ──
+    st.markdown("---")
+    st.subheader("複数商圏の市場規模比較")
+    compare_areas = st.multiselect(
+        "比較する市町村を選択（複数可）",
+        municipalities,
+        default=["秋田市", "横手市", "大仙市", "由利本荘市"],
+    )
+    if compare_areas:
+        comp_data = []
+        for area in compare_areas:
+            hh = market_data.get_households(area)
+            ms = market_data.calc_market_size(exp_data["秋田"], hh)
+            comp_data.append({"市町村": area, "推計市場規模（万円）": ms // 10000, "世帯数": hh})
+        df_comp = pd.DataFrame(comp_data).sort_values("推計市場規模（万円）", ascending=False)
+        fig_comp = px.bar(
+            df_comp, x="市町村", y="推計市場規模（万円）",
+            text_auto=True,
+            color="推計市場規模（万円）",
+            color_continuous_scale="Blues",
+            title=f"{selected_item} の推計市場規模比較（万円）",
+        )
+        fig_comp.update_traces(texttemplate="%{y:,}万円", textposition="outside")
+        fig_comp.update_layout(height=360, coloraxis_showscale=False,
+                               yaxis_ticksuffix="万円", yaxis_tickformat=",")
+        st.plotly_chart(fig_comp, use_container_width=True)
+
+    st.markdown("---")
+    st.caption(
+        "**免責事項**: 本ページの市場規模推計は、総務省家計調査の全国平均値を参考に算出した推計値です。"
+        "実際の市場規模・シェアとは異なります。経営判断にあたっては必ず一次情報をご確認ください。"
+    )
+
+
 # ルーティング
 # ============================================================
 if page == "📊 総合概要":
@@ -2207,6 +2434,8 @@ elif page == "🔎 業種別分析":
     page_industry_analysis()
 elif page == "🗾 東北4県比較":
     page_tohoku()
+elif page == "📈 地域市場シェア分析":
+    page_market_share()
 elif page == "🏛️ 政策提言":
     page_policy()
 elif page == "📚 事例研究DB":

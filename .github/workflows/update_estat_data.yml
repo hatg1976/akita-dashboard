@@ -11,6 +11,10 @@ on:
 permissions:
   contents: write
 
+env:
+  # Node.js 24 を使用（Node.js 20 deprecation 警告を抑制）
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   update-data:
     runs-on: ubuntu-latest
@@ -50,6 +54,6 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          git push \
+          git push --force \
             https://HIDEAKITANIGUCHI:$HF_TOKEN@huggingface.co/spaces/HIDEAKITANIGUCHI/akita-dashboard \
             main

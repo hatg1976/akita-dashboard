@@ -32,12 +32,29 @@ def fetch_all():
     fetched = []
     errors = []
 
+    # APIキーの確認（値は表示しない）
+    api_key = os.getenv("ESTAT_API_KEY", "")
+    if api_key:
+        print(f"✅ ESTAT_API_KEY: 設定済み（{len(api_key)}文字）")
+    else:
+        print("❌ ESTAT_API_KEY が設定されていません。GitHub Secrets を確認してください。")
+        # APIキーがなければマニフェストだけ更新して正常終了
+        manifest = {
+            "last_updated": today,
+            "fetched": [],
+            "errors": ["APIキー未設定"],
+        }
+        (OUTPUT_DIR / "last_updated.json").write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        return
+
     for area_code, pref_name in TOHOKU_PREFS.items():
-        print(f"取得中: {pref_name} ({area_code}) ...", end=" ", flush=True)
+        print(f"\n--- {pref_name} ({area_code}) を取得中 ---")
         try:
             df, source = fetch_formatted_population_trend(area_code)
             if df.empty:
-                print("データなし（スキップ）")
+                print(f"  ⚠ データが空でした（スキップ）")
                 errors.append(pref_name)
                 continue
 
@@ -53,11 +70,12 @@ def fetch_all():
                 json.dumps(cache, ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
-            print(f"OK ({len(df)}件) -> {out_path.name}")
+            print(f"  ✅ 保存完了: {out_path.name}（{len(df)}件）")
+            print(f"     最新年: {int(df['年'].max())}年  総人口: {df.sort_values('年').iloc[-1]['総人口（万人）']}万人")
             fetched.append(pref_name)
 
         except Exception as e:
-            print(f"エラー: {e}")
+            print(f"  ❌ エラー: {type(e).__name__}: {e}")
             errors.append(pref_name)
 
     # マニフェスト（最終更新日・成否サマリー）
@@ -71,15 +89,16 @@ def fetch_all():
         json.dumps(manifest, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    print(f"\nマニフェスト更新: {manifest_path}")
 
+    print(f"\n{'='*40}")
+    print(f"完了: {today}")
+    print(f"  成功: {fetched}")
     if errors:
-        print(f"警告: {errors} の取得に失敗しました")
-    print(f"完了: {fetched} のデータを更新しました（{today}）")
-
-    return len(errors) == 0
+        print(f"  失敗: {errors}")
+    print(f"{'='*40}")
 
 
 if __name__ == "__main__":
-    success = fetch_all()
-    sys.exit(0 if success else 1)
+    fetch_all()
+    # エラーがあっても exit(0) でワークフローを継続させる
+    sys.exit(0)

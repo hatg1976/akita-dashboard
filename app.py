@@ -17,7 +17,6 @@ from collector import (
     get_sample_industry,
     get_sample_economy,
     get_sample_municipal,
-    get_sample_renewable_energy,
     get_sample_food_manufacturing,
     get_sample_food_trend,
     get_sample_food_challenge,
@@ -38,6 +37,8 @@ from collector import (
     get_tohoku_industry,
     get_tohoku_winlose,
     TOHOKU_COLORS,
+    get_industry_hierarchy,
+    get_industry_detail,
 )
 
 @st.cache_data(ttl=86400)
@@ -120,7 +121,7 @@ st.sidebar.markdown("---")
 page = st.sidebar.selectbox(
     "表示するデータ",
     ["📊 総合概要", "👥 人口動態", "🏭 産業構造", "💰 経済指標", "🏘️ 市町村比較",
-     "🍱 食品製造業", "🏪 商店街", "⚡ 再生可能エネルギー",
+     "🍱 食品製造業", "🏪 商店街", "🔎 業種別分析",
      "🗾 東北4県比較",
      "🏛️ 政策提言", "📚 事例研究DB", "💴 補助金カレンダー", "📝 施策メモ",
      "🔌 e-Stat API連携"],
@@ -446,45 +447,122 @@ def page_municipal():
 
 
 # ============================================================
-# 再生可能エネルギーページ
+# 業種別分析ページ
 # ============================================================
-def page_renewable():
-    st.title("⚡ 再生可能エネルギー")
+def page_industry_analysis():
+    st.title("🔎 業種別分析")
+    st.caption("日本標準産業分類の中分類で業種を選択し、秋田県内の動向・課題・診断士向け提言を確認する")
     st.markdown("---")
 
-    df = get_sample_renewable_energy()
+    hierarchy = get_industry_hierarchy()
 
-    col1, col2 = st.columns(2)
+    # ── 大分類タブ ────────────────────────────────────────────
+    tab_labels = [f"{v['icon']} {k}" for k, v in hierarchy.items()]
+    tabs = st.tabs(tab_labels)
 
-    with col1:
-        st.subheader("エネルギー種別 導入量（MW）")
-        fig = px.bar(
-            df, x="エネルギー種別", y="導入量（MW）",
-            color="エネルギー種別",
-            text="導入量（MW）",
-        )
-        fig.update_traces(texttemplate="%{text}MW", textposition="outside")
-        fig.update_layout(height=350, showlegend=False)
-        st.plotly_chart(fig, use_container_width=True)
+    for tab, (major, major_info) in zip(tabs, hierarchy.items()):
+        with tab:
+            cats = major_info["categories"]
 
-    with col2:
-        st.subheader("全国順位")
-        fig = go.Figure(go.Bar(
-            x=df["全国順位"],
-            y=df["エネルギー種別"],
-            orientation="h",
-            marker_color=["#d62728" if r <= 5 else "#1f77b4" for r in df["全国順位"]],
-            text=[f"全国{r}位" for r in df["全国順位"]],
-            textposition="outside",
-        ))
-        fig.update_layout(
-            height=350, xaxis_title="全国順位（小さいほど上位）",
-            xaxis=dict(autorange="reversed"),
-        )
-        st.plotly_chart(fig, use_container_width=True)
+            # 中分類セレクター
+            selected = st.radio(
+                "中分類を選択",
+                cats,
+                horizontal=True,
+                key=f"radio_{major}",
+            )
 
-    st.info("**注目ポイント**: 秋田県の風力発電は全国3位。洋上風力の開発が進めば、エネルギー産業が新たな雇用創出の柱になる可能性があります。")
-    st.dataframe(df, use_container_width=True)
+            st.markdown("---")
+            detail = get_industry_detail(selected)
+            if not detail:
+                st.warning("データがまだ登録されていません。")
+                continue
+
+            # ── KPI カード ─────────────────────────────────────
+            col1, col2, col3, col4 = st.columns(4)
+            yoy = detail["前年比_pct"]
+            delta_color = "normal" if yoy >= 0 else "inverse"
+            col1.metric("事業所数",   f"{detail['事業所数']:,}社")
+            col2.metric("従業員数",   f"{detail['従業員数']:,}人")
+            col3.metric("年間売上額", f"{detail['売上額_億円']:,}億円",
+                        delta=f"{yoy:+.1f}%（前年比）", delta_color=delta_color)
+            col4.metric("大分類",     detail["大分類"])
+
+            # ── グラフ 2列 ──────────────────────────────────────
+            col_l, col_r = st.columns(2)
+
+            with col_l:
+                # 5年推移
+                trend = detail["trend"]
+                df_trend = pd.DataFrame({
+                    "年": trend["年"],
+                    "売上額_億円": trend["売上"],
+                    "従業員_百人": trend["従業員"],
+                })
+                fig = go.Figure()
+                fig.add_trace(go.Bar(
+                    x=df_trend["年"], y=df_trend["売上額_億円"],
+                    name="売上額（億円）", marker_color="#1f4e79",
+                    yaxis="y",
+                ))
+                fig.add_trace(go.Scatter(
+                    x=df_trend["年"], y=df_trend["従業員_百人"],
+                    name="従業員（百人）", line=dict(color="#d62728", width=2),
+                    mode="lines+markers", yaxis="y2",
+                ))
+                fig.update_layout(
+                    title=f"{selected} — 5年間の推移",
+                    height=340,
+                    yaxis=dict(title="売上額（億円）"),
+                    yaxis2=dict(title="従業員（百人）", overlaying="y", side="right"),
+                    legend=dict(orientation="h", y=-0.2),
+                )
+                st.plotly_chart(fig, use_container_width=True)
+
+            with col_r:
+                # 東北4県比較
+                tohoku = detail["tohoku"]
+                prefs  = list(tohoku.keys())
+                vals   = list(tohoku.values())
+                colors = ["#d62728" if p == "秋田県" else "#aec7e8" for p in prefs]
+                fig = go.Figure(go.Bar(
+                    x=prefs, y=vals,
+                    marker_color=colors,
+                    text=vals,
+                    texttemplate="%{text:,}億円",
+                    textposition="outside",
+                ))
+                fig.update_layout(
+                    title=f"東北4県比較（売上額 億円）",
+                    height=340,
+                    yaxis_title="億円",
+                )
+                st.plotly_chart(fig, use_container_width=True)
+
+            # ── 課題・強み・提言 ────────────────────────────────
+            st.markdown("---")
+            col_a, col_b, col_c = st.columns([2, 2, 3])
+
+            with col_a:
+                st.markdown("#### ⚠️ 主な課題")
+                for item in detail.get("課題", []):
+                    st.error(f"• {item}")
+
+            with col_b:
+                st.markdown("#### ✅ 強み・機会")
+                for item in detail.get("強み", []):
+                    st.success(f"• {item}")
+
+            with col_c:
+                st.markdown("#### 💡 診断士としての提言")
+                st.info(detail.get("提言", ""))
+
+                # 関連補助金
+                subsidies = detail.get("関連補助金", [])
+                if subsidies:
+                    st.markdown("**関連補助金・支援制度**")
+                    for s in subsidies:
+                        st.markdown(f"- {s}")
 
 
 # ============================================================
@@ -2102,8 +2180,8 @@ elif page == "🍱 食品製造業":
     page_food()
 elif page == "🏪 商店街":
     page_shotengai()
-elif page == "⚡ 再生可能エネルギー":
-    page_renewable()
+elif page == "🔎 業種別分析":
+    page_industry_analysis()
 elif page == "🗾 東北4県比較":
     page_tohoku()
 elif page == "🏛️ 政策提言":

@@ -10,6 +10,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import io
 
+import estat_api
 from collector import (
     get_sample_population,
     get_sample_migration,
@@ -69,7 +70,8 @@ page = st.sidebar.selectbox(
     "表示するデータ",
     ["📊 総合概要", "👥 人口動態", "🏭 産業構造", "💰 経済指標", "🏘️ 市町村比較",
      "🍱 食品製造業", "🏪 商店街", "⚡ 再生可能エネルギー",
-     "🏛️ 政策提言", "📚 事例研究DB", "💴 補助金カレンダー", "📝 施策メモ"],
+     "🏛️ 政策提言", "📚 事例研究DB", "💴 補助金カレンダー", "📝 施策メモ",
+     "🔌 e-Stat API連携"],
 )
 
 st.sidebar.markdown("---")
@@ -79,7 +81,10 @@ st.sidebar.markdown("- 住民基本台帳人口移動報告")
 st.sidebar.markdown("- 経済センサス（経産省）")
 st.sidebar.markdown("- 秋田県統計課")
 st.sidebar.markdown("---")
-st.sidebar.info("※ 現在はサンプルデータを表示しています。\ne-Stat APIキーを設定すると実データを取得できます。")
+if estat_api.is_api_key_set():
+    st.sidebar.success("e-Stat API: 接続済み ✓")
+else:
+    st.sidebar.info("※ 現在はサンプルデータを表示。\n「🔌 e-Stat API連携」ページでAPIキーを設定すると実データを取得できます。")
 
 
 # ============================================================
@@ -1330,6 +1335,310 @@ def page_subsidies():
 
 
 # ============================================================
+# e-Stat API連携ページ
+# ============================================================
+def page_estat():
+    st.title("🔌 e-Stat API連携")
+    st.caption("政府統計の総合窓口（e-Stat）から実データをリアルタイムに取得・分析する")
+    st.markdown("---")
+
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "⚙️ API設定",
+        "🔍 統計検索",
+        "📥 データ取得",
+        "📋 統計IDカタログ",
+    ])
+
+    # ========== TAB1: API設定 ==========
+    with tab1:
+        st.subheader("APIキーの設定")
+
+        col_left, col_right = st.columns([3, 2])
+        with col_left:
+            current_key = st.session_state.get("estat_api_key", "")
+            key_input = st.text_input(
+                "e-Stat APIキー（appId）",
+                value=current_key,
+                type="password",
+                placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                help="e-Stat マイページで発行したアプリケーションIDを入力してください",
+            )
+            col_save, col_clear = st.columns(2)
+            with col_save:
+                if st.button("💾 保存", use_container_width=True):
+                    st.session_state["estat_api_key"] = key_input.strip()
+                    st.success("APIキーをセッションに保存しました。")
+                    st.rerun()
+            with col_clear:
+                if st.button("🗑️ クリア", use_container_width=True):
+                    st.session_state["estat_api_key"] = ""
+                    st.rerun()
+
+        with col_right:
+            st.markdown("#### 接続状態")
+            if estat_api.is_api_key_set():
+                st.success("APIキー設定済み ✓")
+                if st.button("🔗 接続テスト"):
+                    with st.spinner("接続確認中..."):
+                        ok, msg = estat_api.test_connection()
+                    if ok:
+                        st.success(msg)
+                    else:
+                        st.error(msg)
+            else:
+                st.warning("APIキー未設定")
+
+        st.markdown("---")
+        st.subheader("APIキーの取得方法")
+        st.markdown("""
+        1. **e-Stat ユーザー登録**（無料）
+           - 右のサイトでアカウントを作成します
+        2. **アプリケーションID申請**
+           - マイページ → 「API機能（アプリケーションID発行）」→「発行」
+           - アプリケーション名: 任意（例: 秋田ダッシュボード）
+           - URL: `http://localhost` でも可
+        3. **発行されたIDをコピー**してこのページの入力欄に貼り付ける
+        """)
+        st.info(
+            "APIキーは `.env` ファイルに `ESTAT_API_KEY=your_key_here` と書いておくと、"
+            "アプリ再起動後も自動で読み込まれます。"
+        )
+
+        st.markdown("#### .env ファイルの設定例")
+        st.code("ESTAT_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", language="bash")
+
+        st.markdown("#### 利用制限")
+        st.dataframe(pd.DataFrame({
+            "項目": ["1日のリクエスト上限", "1リクエストの最大取得件数", "利用料金"],
+            "内容": ["10万リクエスト（無料）", "10万件", "無料"],
+        }), use_container_width=True, hide_index=True)
+
+    # ========== TAB2: 統計検索 ==========
+    with tab2:
+        st.subheader("統計表を検索する")
+        st.markdown("キーワードで e-Stat の統計表データベースを検索し、統計表IDを調べることができます。")
+
+        col1, col2, col3 = st.columns([3, 2, 1])
+        with col1:
+            keyword = st.text_input(
+                "検索キーワード",
+                placeholder="例: 人口 秋田 / 賃金 製造業 / 商業統計",
+            )
+        with col2:
+            field_label = st.selectbox(
+                "統計分野",
+                options=list(estat_api.STATS_FIELD_OPTIONS.keys()),
+            )
+        with col3:
+            st.markdown("　")
+            search_btn = st.button("🔍 検索", use_container_width=True)
+
+        if search_btn:
+            if not keyword:
+                st.warning("キーワードを入力してください。")
+            elif not estat_api.is_api_key_set():
+                st.error("APIキーが設定されていません。「API設定」タブで設定してください。")
+            else:
+                field_code = estat_api.STATS_FIELD_OPTIONS[field_label]
+                with st.spinner(f"「{keyword}」を検索中..."):
+                    try:
+                        df_result = estat_api.search_statistics(keyword, field_code, limit=50)
+                        st.session_state["search_result"] = df_result
+                        st.session_state["search_keyword"] = keyword
+                    except Exception as e:
+                        st.error(f"検索エラー: {e}")
+
+        if "search_result" in st.session_state:
+            df_r = st.session_state["search_result"]
+            kw = st.session_state.get("search_keyword", "")
+            st.markdown(f"**「{kw}」の検索結果: {len(df_r)} 件**")
+
+            if df_r.empty:
+                st.info("該当する統計表が見つかりませんでした。キーワードを変えて試してください。")
+            else:
+                st.dataframe(df_r, use_container_width=True, height=350)
+
+                st.markdown("---")
+                st.markdown("##### 統計表IDを「データ取得」タブで使う")
+                selected_id = st.selectbox(
+                    "データ取得したい統計表IDを選択",
+                    options=df_r["統計表ID"].tolist(),
+                    format_func=lambda x: f"{x} — {df_r[df_r['統計表ID']==x]['表題'].values[0][:40]}…"
+                    if x in df_r["統計表ID"].values else x,
+                )
+                if st.button("📥 このIDでデータ取得 →"):
+                    st.session_state["fetch_stats_id"] = selected_id
+                    st.info(f"統計表ID `{selected_id}` を「データ取得」タブにセットしました。タブを切り替えてください。")
+
+    # ========== TAB3: データ取得 ==========
+    with tab3:
+        st.subheader("統計データをリアルタイムに取得する")
+
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            # カタログから選ぶ or 直接入力
+            input_mode = st.radio(
+                "統計表の指定方法",
+                ["カタログから選ぶ", "統計表IDを直接入力"],
+                horizontal=True,
+            )
+
+            if input_mode == "カタログから選ぶ":
+                catalog_key = st.selectbox(
+                    "統計表",
+                    options=list(estat_api.STAT_CATALOG.keys()),
+                )
+                stats_id = estat_api.STAT_CATALOG[catalog_key]["id"]
+                st.caption(estat_api.STAT_CATALOG[catalog_key]["description"])
+                st.code(f"統計表ID: {stats_id}", language=None)
+            else:
+                default_id = st.session_state.get("fetch_stats_id", "0003448237")
+                stats_id = st.text_input(
+                    "統計表ID（10桁）",
+                    value=default_id,
+                    placeholder="例: 0003448237",
+                ).strip()
+
+        with col2:
+            area_code = st.text_input(
+                "地域コード",
+                value=estat_api.AKITA_AREA_CODE,
+                help="秋田県=05000、東北全体=0500*、全国=空欄",
+            ).strip()
+            limit = st.number_input("最大取得件数", min_value=10, max_value=10000, value=500, step=100)
+
+        fetch_btn = st.button("🔄 データを取得する", type="primary", use_container_width=False)
+
+        if fetch_btn:
+            if not stats_id:
+                st.warning("統計表IDを入力してください。")
+            elif not estat_api.is_api_key_set():
+                st.error("APIキーが設定されていません。「API設定」タブで設定してください。")
+            else:
+                with st.spinner(f"統計表 `{stats_id}` を取得中..."):
+                    try:
+                        # メタ情報を先に取得
+                        meta_info = estat_api.get_stats_meta(stats_id)
+                        df_fetched, class_meta = estat_api.fetch_stats_data(
+                            stats_data_id=stats_id,
+                            area_code=area_code if area_code else None,
+                            limit=int(limit),
+                        )
+                        st.session_state["fetched_df"] = df_fetched
+                        st.session_state["fetched_meta"] = class_meta
+                        st.session_state["fetched_meta_info"] = meta_info
+                        st.session_state["fetched_stats_id"] = stats_id
+                    except Exception as e:
+                        st.error(f"取得エラー: {e}")
+                        st.session_state.pop("fetched_df", None)
+
+        # 取得結果の表示
+        if "fetched_df" in st.session_state:
+            df_show = st.session_state["fetched_df"]
+            meta_info = st.session_state.get("fetched_meta_info", {})
+            class_meta = st.session_state.get("fetched_meta", {})
+            fetched_id = st.session_state.get("fetched_stats_id", "")
+
+            st.markdown("---")
+
+            # 統計表情報
+            col_a, col_b, col_c, col_d = st.columns(4)
+            col_a.metric("統計表ID", fetched_id)
+            col_b.metric("調査機関", meta_info.get("gov_org", "—"))
+            col_c.metric("調査年月", str(meta_info.get("survey_date", "—")))
+            col_d.metric("総レコード数", str(meta_info.get("total_count", "—")))
+
+            st.markdown(f"**{meta_info.get('title', '（タイトル取得中）')}**")
+
+            # データプレビュー
+            st.subheader(f"データプレビュー（{len(df_show)} 行取得）")
+
+            if df_show.empty:
+                st.warning("データが0件でした。地域コードや統計表IDを確認してください。")
+            else:
+                # 時系列チャートを試みる（time 列 × value 列があれば）
+                if "time" in df_show.columns and "value" in df_show.columns:
+                    df_chart = (df_show.dropna(subset=["value"])
+                                       .groupby("time")["value"]
+                                       .sum()
+                                       .reset_index()
+                                       .sort_values("time"))
+                    if len(df_chart) > 1:
+                        fig = px.line(
+                            df_chart, x="time", y="value",
+                            markers=True,
+                            title=f"{meta_info.get('title', '')} — 時系列（秋田県）",
+                            color_discrete_sequence=["#1f4e79"],
+                        )
+                        fig.update_layout(height=320, xaxis_title="時点", yaxis_title="値")
+                        st.plotly_chart(fig, use_container_width=True)
+
+                # カテゴリ列をラベルに変換して表示
+                df_display = df_show.copy()
+                for col in df_display.columns:
+                    if col in class_meta:
+                        df_display[col] = df_display[col].map(
+                            class_meta[col]
+                        ).fillna(df_display[col])
+
+                st.dataframe(df_display, use_container_width=True, height=320)
+
+                # CSVダウンロード
+                csv = df_display.to_csv(index=False, encoding="utf-8-sig")
+                st.download_button(
+                    "📥 CSVダウンロード",
+                    csv,
+                    f"estat_{fetched_id}.csv",
+                    "text/csv",
+                )
+
+                # カテゴリ定義を展開表示
+                if class_meta:
+                    with st.expander("📖 カテゴリ定義（CLASS_INF）"):
+                        for obj_id, mapping in class_meta.items():
+                            st.markdown(f"**{obj_id}**")
+                            df_cls = pd.DataFrame(
+                                list(mapping.items()), columns=["コード", "名称"]
+                            )
+                            st.dataframe(df_cls, use_container_width=True, hide_index=True, height=200)
+
+    # ========== TAB4: 統計IDカタログ ==========
+    with tab4:
+        st.subheader("よく使う統計表IDカタログ")
+        st.markdown("このダッシュボードに関連する主要統計表の一覧です。統計表IDをコピーして「データ取得」タブで使用できます。")
+
+        for name, info in estat_api.STAT_CATALOG.items():
+            cat_icon = {
+                "population": "👥",
+                "migration": "🚶",
+                "industry": "🏭",
+                "wage": "💴",
+            }.get(info.get("category", ""), "📊")
+
+            with st.container():
+                col1, col2, col3 = st.columns([3, 2, 1])
+                with col1:
+                    st.markdown(f"**{cat_icon} {name}**")
+                    st.caption(info["description"])
+                with col2:
+                    st.markdown(f"分野: `{info['stats_field']}`")
+                with col3:
+                    st.code(info["id"], language=None)
+                    if st.button("取得 →", key=f"cat_{info['id']}"):
+                        st.session_state["fetch_stats_id"] = info["id"]
+                        st.info(f"ID `{info['id']}` をセットしました。「データ取得」タブへ移動してください。")
+                st.markdown("---")
+
+        st.markdown("#### e-Stat 地域コード早見表（秋田県関連）")
+        area_data = {
+            "地域": ["秋田県（全体）", "秋田市", "横手市", "大仙市", "能代市", "由利本荘市", "大館市", "湯沢市"],
+            "e-Stat コード": ["05000", "05201", "05202", "05209", "05203", "05210", "05204", "05206"],
+            "備考": ["都道府県", "県庁所在地", "横手盆地", "大曲花火", "木都・能代", "鳥海山麓", "比内鶏", "湯沢雄物川"],
+        }
+        st.dataframe(pd.DataFrame(area_data), use_container_width=True, hide_index=True)
+
+
+# ============================================================
 # ルーティング
 # ============================================================
 if page == "📊 総合概要":
@@ -1356,3 +1665,5 @@ elif page == "💴 補助金カレンダー":
     page_subsidies()
 elif page == "📝 施策メモ":
     page_notes()
+elif page == "🔌 e-Stat API連携":
+    page_estat()

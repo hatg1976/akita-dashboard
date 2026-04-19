@@ -798,23 +798,27 @@ def page_policy():
         diff_map = {"低": 1, "中": 2, "高": 3}
         df_chart = df_filtered.copy()
         df_chart["難易度_数値"] = df_chart["難易度"].map(diff_map)
-        prio_map = {"高": 20, "中": 12}
-        df_chart["優先度_サイズ"] = df_chart["優先度"].map(prio_map)
+        # 列名の特殊文字を回避するためにリネーム
+        df_chart["期待効果_億円"] = pd.to_numeric(df_chart["期待効果（億円/年）"], errors="coerce")
+        prio_map = {"高": 15, "中": 8}
+        df_chart["優先度_サイズ"] = df_chart["優先度"].map(prio_map).fillna(8)
 
         fig = px.scatter(
             df_chart,
             x="難易度_数値",
-            y="期待効果（億円/年）",
+            y="期待効果_億円",
             size="優先度_サイズ",
+            size_max=25,
             color="分野",
             text="提言ID",
             hover_name="提言タイトル",
             hover_data={"難易度_数値": False, "優先度_サイズ": False,
                         "主な提言主体": True, "実施期間": True},
             title="提言の優先度マップ（右上ほど高効果・取り組みやすい）",
-            labels={"難易度_数値": "難易度（低→高）", "期待効果（億円/年）": "期待効果（億円/年）"},
+            labels={"難易度_数値": "難易度（低→高）", "期待効果_億円": "期待効果（億円/年）"},
             color_discrete_sequence=px.colors.qualitative.Set2,
         )
+        fig.update_layout(yaxis_range=[0, 70])
         fig.update_traces(textposition="top center", marker=dict(opacity=0.85))
         fig.update_xaxes(tickvals=[1, 2, 3], ticktext=["低", "中", "高"])
         fig.update_layout(height=420)

@@ -2330,19 +2330,23 @@ def page_market_share():
                         weight=2,
                         tooltip=f"商圏半径 {radius_label}",
                     ).add_to(m)
-                    folium.Marker(
+                    folium.CircleMarker(
                         location=[center_lat, center_lon],
+                        radius=10,
+                        color="red",
+                        fill=True,
+                        fill_color="red",
+                        fill_opacity=0.9,
                         tooltip=address_input,
-                        icon=folium.Icon(color="red", icon="home"),
                     ).add_to(m)
                     for area in areas_in_radius:
                         ratio = area["included_ratio"]
                         color = "green" if ratio >= 50 else "orange" if ratio >= 15 else "gray"
-                        popup_html = (
-                            f"<b>{area['area_name']}</b><br>"
-                            f"距離: {area['distance_km']} km<br>"
-                            f"推計世帯数: <b>{area['estimated_households']:,}世帯</b><br>"
-                            f"包含率: {area['included_ratio']}%"
+                        tooltip_text = (
+                            f"{area['area_name']} | "
+                            f"距離 {area['distance_km']}km | "
+                            f"推計 {area['estimated_households']:,}世帯 | "
+                            f"包含率 {area['included_ratio']}%"
                         )
                         folium.CircleMarker(
                             location=[area["lat"], area["lon"]],
@@ -2350,8 +2354,7 @@ def page_market_share():
                             color=color,
                             fill=True,
                             fill_opacity=0.8,
-                            tooltip=popup_html,
-                            popup=folium.Popup(popup_html, max_width=220),
+                            tooltip=tooltip_text,
                         ).add_to(m)
                     st_folium(m, width=700, height=420)
                     leg1, leg2, leg3 = st.columns(3)

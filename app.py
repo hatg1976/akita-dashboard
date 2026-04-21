@@ -2221,7 +2221,7 @@ def page_estat():
 def page_market_share():
     try:
         import folium
-        from streamlit_folium import st_folium
+        import streamlit.components.v1 as _stc
         _folium_ok = True
     except ImportError:
         _folium_ok = False
@@ -2356,7 +2356,8 @@ def page_market_share():
                             fill_opacity=0.8,
                             tooltip=tooltip_text,
                         ).add_to(m)
-                    st_folium(m, width=700, height=420)
+                    map_html = m._repr_html_()
+                    st.components.v1.html(map_html, width=720, height=440)
                     leg1, leg2, leg3 = st.columns(3)
                     leg1.success("🟢 包含率 50%以上")
                     leg2.warning("🟠 包含率 15〜50%")

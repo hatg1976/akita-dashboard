@@ -2353,7 +2353,7 @@ def page_market_share():
                     popup=folium.Popup(popup_html, max_width=220),
                 ).add_to(m)
 
-            st_folium(m, width="100%", height=420, returned_objects=[])
+            st_folium(m, width=700, height=420)
 
             # 凡例
             leg1, leg2, leg3 = st.columns(3)

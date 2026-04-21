@@ -2283,6 +2283,7 @@ def page_market_share():
 
         geocoded = False
         center_lat, center_lon = jstat_api.get_akita_center()
+        areas_in_radius: list = []
 
         if address_input:
             with st.spinner("住所を検索中...（国土地理院 Geocoding API）"):
@@ -2295,74 +2296,70 @@ def page_market_share():
             else:
                 st.warning("住所が見つかりませんでした。より具体的な住所を入力してください。")
 
-        # 世帯数推計
-        hh_dict = {k: v for k, v in zip(
-            market_data.get_municipalities(),
-            [market_data.get_households(m) for m in market_data.get_municipalities()]
-        ) if k != "秋田県全体"}
-
-        total_hh, areas_in_radius = jstat_api.estimate_market_area(
-            center_lat, center_lon, radius_km, hh_dict
-        )
-        households = total_hh
-        selected_area = f"{address_input or '秋田県中心部'} 半径{radius_label}"
-
-        # ── Folium 地図 ──
-        if _folium_ok:
-            m = folium.Map(
-                location=[center_lat, center_lon],
-                zoom_start=11 if radius_km <= 2 else 9,
-                tiles="OpenStreetMap",
-            )
-
-            # 商圏円
-            folium.Circle(
-                location=[center_lat, center_lon],
-                radius=radius_km * 1000,
-                color="#1f4e79",
-                fill=True,
-                fill_opacity=0.12,
-                weight=2,
-                tooltip=f"商圏半径 {radius_label}",
-            ).add_to(m)
-
-            # 中心マーカー
-            folium.Marker(
-                location=[center_lat, center_lon],
-                tooltip=address_input or "中心地点",
-                icon=folium.Icon(color="red", icon="home"),
-            ).add_to(m)
-
-            # 市町村マーカー（含まれる度合いで色分け）
-            for area in areas_in_radius:
-                ratio = area["included_ratio"]
-                color = "green" if ratio >= 50 else "orange" if ratio >= 15 else "gray"
-                popup_html = (
-                    f"<b>{area['area_name']}</b><br>"
-                    f"距離: {area['distance_km']} km<br>"
-                    f"推計世帯数: <b>{area['estimated_households']:,}世帯</b><br>"
-                    f"商圏内包含率: {area['included_ratio']}%"
-                )
-                folium.CircleMarker(
-                    location=[area["lat"], area["lon"]],
-                    radius=8,
-                    color=color,
-                    fill=True,
-                    fill_opacity=0.8,
-                    tooltip=popup_html,
-                    popup=folium.Popup(popup_html, max_width=220),
-                ).add_to(m)
-
-            st_folium(m, width=700, height=420)
-
-            # 凡例
-            leg1, leg2, leg3 = st.columns(3)
-            leg1.success("🟢 包含率 50%以上")
-            leg2.warning("🟠 包含率 15〜50%")
-            leg3.info("⚫ 包含率 15%未満")
-
+        # 住所未入力時は案内を表示して終了
+        if not address_input:
+            st.info("👆 上の住所欄に店舗・事業所の住所を入力すると、商圏地図と推計世帯数が表示されます。")
+            households = 0
+            selected_area = "（住所未入力）"
         else:
-            st.warning("地図表示には `folium` と `streamlit-folium` が必要です。`pip install folium streamlit-folium` を実行してください。")
+            # 世帯数推計
+            hh_dict = {k: market_data.get_households(k)
+                       for k in market_data.get_municipalities()
+                       if k != "秋田県全体"}
+
+            total_hh, areas_in_radius = jstat_api.estimate_market_area(
+                center_lat, center_lon, radius_km, hh_dict
+            )
+            households = total_hh
+            selected_area = f"{address_input} 半径{radius_label}"
+
+            # ── Folium 地図 ──
+            if _folium_ok and geocoded:
+                try:
+                    m = folium.Map(
+                        location=[center_lat, center_lon],
+                        zoom_start=11 if radius_km <= 2 else 9,
+                        tiles="OpenStreetMap",
+                    )
+                    folium.Circle(
+                        location=[center_lat, center_lon],
+                        radius=radius_km * 1000,
+                        color="#1f4e79",
+                        fill=True,
+                        fill_opacity=0.12,
+                        weight=2,
+                        tooltip=f"商圏半径 {radius_label}",
+                    ).add_to(m)
+                    folium.Marker(
+                        location=[center_lat, center_lon],
+                        tooltip=address_input,
+                        icon=folium.Icon(color="red", icon="home"),
+                    ).add_to(m)
+                    for area in areas_in_radius:
+                        ratio = area["included_ratio"]
+                        color = "green" if ratio >= 50 else "orange" if ratio >= 15 else "gray"
+                        popup_html = (
+                            f"<b>{area['area_name']}</b><br>"
+                            f"距離: {area['distance_km']} km<br>"
+                            f"推計世帯数: <b>{area['estimated_households']:,}世帯</b><br>"
+                            f"包含率: {area['included_ratio']}%"
+                        )
+                        folium.CircleMarker(
+                            location=[area["lat"], area["lon"]],
+                            radius=8,
+                            color=color,
+                            fill=True,
+                            fill_opacity=0.8,
+                            tooltip=popup_html,
+                            popup=folium.Popup(popup_html, max_width=220),
+                        ).add_to(m)
+                    st_folium(m, width=700, height=420)
+                    leg1, leg2, leg3 = st.columns(3)
+                    leg1.success("🟢 包含率 50%以上")
+                    leg2.warning("🟠 包含率 15〜50%")
+                    leg3.info("⚫ 包含率 15%未満")
+                except Exception as e:
+                    st.warning(f"地図の表示中にエラーが発生しました: {e}")
 
         # 商圏内訳テーブル
         if areas_in_radius:

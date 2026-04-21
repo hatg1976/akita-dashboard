@@ -2219,28 +2219,180 @@ def page_estat():
 # 地域市場シェア分析ページ
 # ============================================================
 def page_market_share():
-    from datetime import datetime
+    try:
+        import folium
+        from streamlit_folium import st_folium
+        _folium_ok = True
+    except ImportError:
+        _folium_ok = False
+
+    import jstat_api
 
     st.title("📈 地域市場シェア分析")
     st.caption("家計調査（総務省）の1世帯年間支出 × 商圏世帯数で市場規模を推計し、自社売上からシェアを算出します")
     st.markdown("---")
 
-    st.info(
-        "**使い方**\n\n"
-        "① 商圏エリア（市町村）を選択　② 品目カテゴリ・品目を選択　"
-        "③ 自社の年間売上を入力　→　推計シェアが表示されます\n\n"
-        "⚠️ 市場規模は家計調査の平均値を使った推計です。実際の市場規模とは異なる場合があります。"
-    )
-
     # ── Step 1: 商圏エリア選択 ──
     st.subheader("① 商圏エリアを選択")
-    col1, col2 = st.columns([2, 2])
-    with col1:
-        municipalities = market_data.get_municipalities()
-        selected_area = st.selectbox("市町村", municipalities, index=0)
-    with col2:
-        households = market_data.get_households(selected_area)
-        st.metric("世帯数（令和2年国勢調査）", f"{households:,} 世帯")
+
+    area_mode = st.radio(
+        "商圏の決め方",
+        ["🏘️ 市町村で選ぶ", "📍 住所と半径で商圏を描く（j-STAT MAP連携）"],
+        horizontal=True,
+    )
+
+    municipalities = market_data.get_municipalities()
+    households = 0
+    selected_area = ""
+
+    # ── モード A: 市町村選択 ──────────────────────────────────
+    if area_mode == "🏘️ 市町村で選ぶ":
+        st.info(
+            "市町村を選択して、その市町村全体を商圏として市場規模を推計します。"
+        )
+        col1, col2 = st.columns([2, 2])
+        with col1:
+            selected_area = st.selectbox("市町村", municipalities, index=0)
+        with col2:
+            households = market_data.get_households(selected_area)
+            st.metric("世帯数（令和2年国勢調査）", f"{households:,} 世帯")
+
+    # ── モード B: 住所＋半径（j-STAT MAP連携）────────────────
+    else:
+        st.info(
+            "**j-STAT MAP連携モード** — 住所を入力して半径を設定すると、"
+            "国勢調査データから商圏内の推計世帯数を算出します。"
+            "地図上に商圏円と市町村の重なりが表示されます。\n\n"
+            "住所例: `秋田市大町3丁目` / `横手市前郷` / `大館市有浦`"
+        )
+
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            address_input = st.text_input(
+                "店舗・事業所の住所（秋田県内）",
+                placeholder="例: 秋田市大町3丁目",
+                help="「秋田県」は省略できます。国土地理院 Geocoding API で座標に変換します。",
+            )
+        with col2:
+            radius_options = {
+                "500m": 0.5, "1km": 1.0, "2km": 2.0,
+                "3km": 3.0, "5km": 5.0, "10km": 10.0,
+            }
+            radius_label = st.selectbox("商圏半径", list(radius_options.keys()), index=2)
+            radius_km = radius_options[radius_label]
+
+        geocoded = False
+        center_lat, center_lon = jstat_api.get_akita_center()
+
+        if address_input:
+            with st.spinner("住所を検索中...（国土地理院 Geocoding API）"):
+                result = jstat_api.geocode_gsi(address_input)
+
+            if result:
+                center_lat, center_lon = result
+                geocoded = True
+                st.success(f"📍 座標取得: 緯度 {center_lat:.4f}°N / 経度 {center_lon:.4f}°E")
+            else:
+                st.warning("住所が見つかりませんでした。より具体的な住所を入力してください。")
+
+        # 世帯数推計
+        hh_dict = {k: v for k, v in zip(
+            market_data.get_municipalities(),
+            [market_data.get_households(m) for m in market_data.get_municipalities()]
+        ) if k != "秋田県全体"}
+
+        total_hh, areas_in_radius = jstat_api.estimate_market_area(
+            center_lat, center_lon, radius_km, hh_dict
+        )
+        households = total_hh
+        selected_area = f"{address_input or '秋田県中心部'} 半径{radius_label}"
+
+        # ── Folium 地図 ──
+        if _folium_ok:
+            m = folium.Map(
+                location=[center_lat, center_lon],
+                zoom_start=11 if radius_km <= 2 else 9,
+                tiles="OpenStreetMap",
+            )
+
+            # 商圏円
+            folium.Circle(
+                location=[center_lat, center_lon],
+                radius=radius_km * 1000,
+                color="#1f4e79",
+                fill=True,
+                fill_opacity=0.12,
+                weight=2,
+                tooltip=f"商圏半径 {radius_label}",
+            ).add_to(m)
+
+            # 中心マーカー
+            folium.Marker(
+                location=[center_lat, center_lon],
+                tooltip=address_input or "中心地点",
+                icon=folium.Icon(color="red", icon="home"),
+            ).add_to(m)
+
+            # 市町村マーカー（含まれる度合いで色分け）
+            for area in areas_in_radius:
+                ratio = area["included_ratio"]
+                color = "green" if ratio >= 50 else "orange" if ratio >= 15 else "gray"
+                popup_html = (
+                    f"<b>{area['area_name']}</b><br>"
+                    f"距離: {area['distance_km']} km<br>"
+                    f"推計世帯数: <b>{area['estimated_households']:,}世帯</b><br>"
+                    f"商圏内包含率: {area['included_ratio']}%"
+                )
+                folium.CircleMarker(
+                    location=[area["lat"], area["lon"]],
+                    radius=8,
+                    color=color,
+                    fill=True,
+                    fill_opacity=0.8,
+                    tooltip=popup_html,
+                    popup=folium.Popup(popup_html, max_width=220),
+                ).add_to(m)
+
+            st_folium(m, width="100%", height=420, returned_objects=[])
+
+            # 凡例
+            leg1, leg2, leg3 = st.columns(3)
+            leg1.success("🟢 包含率 50%以上")
+            leg2.warning("🟠 包含率 15〜50%")
+            leg3.info("⚫ 包含率 15%未満")
+
+        else:
+            st.warning("地図表示には `folium` と `streamlit-folium` が必要です。`pip install folium streamlit-folium` を実行してください。")
+
+        # 商圏内訳テーブル
+        if areas_in_radius:
+            st.markdown("#### 商圏内 市町村別 推計世帯数")
+            df_areas = pd.DataFrame(areas_in_radius)[
+                ["area_name", "distance_km", "estimated_households", "included_ratio"]
+            ].rename(columns={
+                "area_name": "市町村",
+                "distance_km": "中心からの距離(km)",
+                "estimated_households": "推計世帯数",
+                "included_ratio": "包含率(%)",
+            })
+            st.dataframe(df_areas, use_container_width=True, hide_index=True)
+
+        col1, col2 = st.columns(2)
+        col1.metric(
+            f"商圏内 推計世帯数（半径{radius_label}）",
+            f"{households:,} 世帯",
+            help="面積密度法による推計。実際の世帯数とは異なります。",
+        )
+        col2.metric(
+            "含まれる市町村数",
+            f"{len(areas_in_radius)} 市町村",
+        )
+
+        st.caption(
+            "📊 **データ出典**: 世帯数 = 総務省 令和2年国勢調査 / "
+            "座標 = 国土地理院 基盤地図情報 / "
+            "j-STAT MAP（https://jstatmap.e-stat.go.jp/）と同一の国勢調査データを使用"
+        )
 
     st.markdown("---")
 

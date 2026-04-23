@@ -240,13 +240,25 @@ def page_financial():
         unit_label = c1.selectbox("単位", ["千円", "百万円", "億円"])
         n_years    = c2.selectbox("決算期数", [1, 2, 3], index=2)
 
+        _BS_KEYS = ["流動資産", "固定資産", "繰延資産", "流動負債", "固定負債", "純資産"]
+        _PL_KEYS = ["売上高", "変動費", "固定費", "営業外収益", "営業外費用",
+                    "特別利益", "特別損失", "法人税等", "人件費", "減価償却費"]
+
         yr_cols = st.columns(3)
         years = []
         for i in range(3):
-            y = yr_cols[i].number_input(f"第{i+1}期（西暦）", value=2022+i,
-                min_value=1900, max_value=2100, step=1,
-                disabled=(i >= n_years), key=f"year_{i}")
-            years.append(int(y))
+            with yr_cols[i]:
+                y = st.number_input(f"第{i+1}期（西暦）", value=2022+i,
+                    min_value=1900, max_value=2100, step=1,
+                    disabled=(i >= n_years), key=f"year_{i}")
+                years.append(int(y))
+                if i < n_years:
+                    if st.button(f"🗑️ 第{i+1}期をクリア", key=f"clear_{i}"):
+                        for k in _BS_KEYS:
+                            st.session_state[f"bs_{k}_{i}"] = 0
+                        for k in _PL_KEYS:
+                            st.session_state[f"pl_{k}_{i}"] = 0
+                        st.rerun()
         year_labels = [f"{years[i]}年度" for i in range(3)]
 
         st.markdown("---")

@@ -73,7 +73,8 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
     # 特別利益は y=0 の一番下に表示
 
     # Y 軸範囲
-    y_neg = min(0.0, ov_bot, ord_p if ord_p < 0 else 0, net if net < 0 else 0)
+    main_bot = -(non_rev + sp_gn)
+    y_neg = min(0.0, ov_bot, ord_p if ord_p < 0 else 0, net if net < 0 else 0, main_bot)
     y_pos = max(rev + max(non_rev, 0.0), total_a)
     y_min = y_neg * 1.35 if y_neg < 0 else -rev * 0.05
     y_max = y_pos * 1.18
@@ -155,13 +156,22 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
     hline(REV, non_rev + rev, "#2F528F", 1.5)
     hline(REV, non_rev,       "#2F528F", 1.0)
 
-    # ── MAIN 列（変動費 / 粗利益）────────────────────────────────
+    # ── MAIN 列（変動費 / 粗利益 / 営業外収益 / 特別利益）───────────
     rect(MAIN, var_bot, var_top, "#F4A460", "#C87941")
     box( MAIN, var_bot, var_top, f"変動費<br>{var:,.0f}", 10, "white", True)
     rect(MAIN, gro_bot, gro_top, "#C8E6C9", "#4CAF50")
     box( MAIN, gro_bot, gro_top, f"粗利益<br>{gross:,.0f}", 10, "#1a1a1a", True)
     hline(MAIN, gross, "#333", 1.2)
     hline(MAIN, rev,   "#333", 1.5)
+    # 営業外収益：y=0 より下
+    if non_rev > 0:
+        rect(MAIN, -non_rev, 0, "#A5D6A7", "#388E3C")
+        box( MAIN, -non_rev, 0, f"営業外収益 {non_rev:,.0f}", 8, "#1a1a1a", oneline=True)
+    # 特別利益：営業外収益のさらに下
+    if sp_gn > 0:
+        rect(MAIN, -(non_rev + sp_gn), -non_rev, "#81D4FA", "#0288D1")
+        box( MAIN, -(non_rev + sp_gn), -non_rev, f"特別利益 {sp_gn:,.0f}", 8, "#1a1a1a", oneline=True)
+    hline(MAIN, 0, "#666", 0.8)
 
     # ── FIX 列（固定費 + 費用超過を y<0 に）──────────────────────
     rect(FIX, fc_in_bot, fc_in_top, "#CD853F", "#8B5E3C")

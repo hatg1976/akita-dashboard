@@ -156,7 +156,7 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
     rect(FIX, fix_bot, gross, "#CD853F", "#8B5E3C")
     box( FIX, fix_bot, gross, f"固定費<br>{fix:,.0f}", 9, "white", True)
     hline(FIX, gross, "#333", 1.0)
-    hline(FIX, rev,   "#aaa", 0.4)
+    hline(FIX, 0,     "#666", 0.8)
 
     # ── SUB 列（人件費→減価償却費→その他固定費→営業外費用）──────
     if jinken > 0 and j_top > j_bot:
@@ -173,7 +173,6 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
 
     hline(SUB, gross, "#333", 1.0)
     hline(SUB, 0,     "#666", 0.8)
-    hline(SUB, rev,   "#aaa", 0.4)
 
     # ── RT 列（経常利益/損失）────────────────────────────────────
     if ord_p > 0:

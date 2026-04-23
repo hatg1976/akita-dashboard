@@ -151,12 +151,10 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
     hline(MAIN, gross, "#333", 1.2)
     hline(MAIN, rev,   "#333", 1.5)
 
-    # ── FIX 列（固定費 + 費用超過を y<0 に）──────────────────────
-    rect(FIX, fc_in_bot, fc_in_top, "#CD853F", "#8B5E3C")
-    box( FIX, fc_in_bot, fc_in_top, f"固定費<br>{fix:,.0f}", 9, "white", True)
-    if overflow > 0:
-        rect(FIX, ov_bot, ov_top, "#EF9A9A", "#C62828", 1.2)
-        box( FIX, ov_bot, ov_top, f"費用超過<br>{overflow:,.0f}", 8, "#7B0000")
+    # ── FIX 列（固定費：超過分は y<0 に延長）────────────────────
+    fix_bot = -overflow  # overflow=0 なら 0、超過あれば負値
+    rect(FIX, fix_bot, gross, "#CD853F", "#8B5E3C")
+    box( FIX, fix_bot, gross, f"固定費<br>{fix:,.0f}", 9, "white", True)
     hline(FIX, gross, "#333", 1.0)
     hline(FIX, rev,   "#aaa", 0.4)
 

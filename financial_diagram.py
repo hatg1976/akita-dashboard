@@ -9,18 +9,19 @@ import plotly.graph_objects as go
 
 # ─────────────────────────────────────────────────────────────────
 # X レイアウト定数
-#   BS_A ─ BS_L（隙間なし） ─ [ギャップ] ─ REV ─ MAIN ─ FIX ─ SUB ─ RT ─ CF
+#   REV / MAIN / FIX / SUB を均等幅（各 135px）に統一
+#   BS_A ─ BS_L（密着）── [ギャップ40] ── REV ─ MAIN ─ FIX ─ SUB ─ RT ─ CF
 # ─────────────────────────────────────────────────────────────────
-BS_A  = (0,   95)     # 資産列
-BS_L  = (95,  190)    # 負債・純資産列（隙間なし）
-# ← ここに BS/PL ギャップ（40px）→
-REV   = (230, 275)    # 売上高ラベル列（薄い色付き）
-MAIN  = (275, 465)    # 変動費 / 粗利益
-FIX   = (465, 615)    # 固定費（隙間なし）
-SUB   = (615, 755)    # 人件費・営業外費用・減価償却費（隙間なし）
-RT    = (755, 855)    # 経常利益（隙間なし）
-CF    = (855, 955)    # 当期純利益＋減価償却費（隙間なし）
-W     = 970
+BS_A = (0,   95)      # 資産列
+BS_L = (95,  190)     # 負債・純資産列（密着）
+# ←── ギャップ 40px ──→
+REV  = (230, 365)     # 売上高列  135px（均等）
+MAIN = (365, 500)     # 変動費/粗利益  135px（均等）
+FIX  = (500, 635)     # 固定費  135px（均等）
+SUB  = (635, 770)     # 人件費・営業外費用・減価償却費・その他  135px（均等）
+RT   = (770, 880)     # 経常利益  110px
+CF   = (880, 990)     # 当期純利益＋減価償却費  110px
+W    = 995
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -31,12 +32,12 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
     """1年分のブロック図を Plotly Figure で返す。"""
 
     # ── 値の取り出し ──────────────────────────────────────────────
-    curr_a = bs["流動資産"]
-    fix_a  = bs["固定資産"]
-    def_a  = bs["繰延資産"]
-    curr_l = bs["流動負債"]
-    fix_l  = bs["固定負債"]
-    eqy    = bs["純資産"]
+    curr_a  = bs["流動資産"]
+    fix_a   = bs["固定資産"]
+    def_a   = bs["繰延資産"]
+    curr_l  = bs["流動負債"]
+    fix_l   = bs["固定負債"]
+    eqy     = bs["純資産"]
     total_a = curr_a + fix_a + def_a
 
     rev     = pl["売上高"]
@@ -58,9 +59,8 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
     bep     = fix / gross_r if gross_r > 0 else None
     rodo    = jinken / gross if gross > 0 else 0
 
-    # ── Y 座標 ────────────────────────────────────────────────────
-    # BS は P/L（売上高）と同じ高さになるようスケール
-    sc = rev / total_a if total_a else 1.0
+    # ── Y 座標（実額、下0・上rev） ────────────────────────────────
+    sc = rev / total_a if total_a else 1.0  # BS → P/L 同高さにスケール
 
     ca_top = rev;     ca_bot = rev - curr_a * sc
     fa_top = ca_bot;  fa_bot = def_a * sc
@@ -73,16 +73,15 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
     var_top = rev;    var_bot = gross
     gro_top = gross;  gro_bot = 0.0
 
-    # 固定費ブロック
-    fc_top  = min(gross, fix)   # 粗利益超過分はクリップ
-    fc_bot  = 0.0
+    # 固定費ブロック（粗利益を上限にクリップ）
+    fc_top   = min(gross, fix)
+    fc_bot   = 0.0
     overflow = max(0.0, fix - gross)
 
-    # 利益エリア（固定費が粗利益内に収まる場合）
     pr_top = gross if fix <= gross else 0.0
     pr_bot = fc_top
 
-    # サブ項目（上から順に）
+    # サブ項目（上から消費）
     sub_cur = fc_top
 
     def _sub(h):
@@ -92,9 +91,14 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
         sub_cur = bot
         return top, bot
 
-    j_top,  j_bot  = _sub(min(jinken,  fc_top))   if jinken  > 0 else (0, 0)
-    ne_top, ne_bot = _sub(min(non_exp, sub_cur))   if non_exp > 0 else (0, 0)
-    dp_top, dp_bot = _sub(min(deprec,  sub_cur))   if deprec  > 0 else (0, 0)
+    j_top,  j_bot  = _sub(min(jinken,  fc_top))   if jinken  > 0 else (0.0, 0.0)
+    ne_top, ne_bot = _sub(min(non_exp, sub_cur))   if non_exp > 0 else (0.0, 0.0)
+    dp_top, dp_bot = _sub(min(deprec,  sub_cur))   if deprec  > 0 else (0.0, 0.0)
+
+    # その他固定費（残余）
+    other_fix = max(0.0, fix - jinken - non_exp - deprec)
+    ot_top = sub_cur
+    ot_bot = 0.0
 
     # ── ヘルパー ──────────────────────────────────────────────────
     shapes, anns = [], []
@@ -107,8 +111,50 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
             fillcolor=fill, line=dict(color=lclr, width=lw), layer="below",
         ))
 
-    def ann(x, y, txt, sz=9, clr="#222", xa="center", ya="middle",
-            bg=None, bc=None, bold=False):
+    def hline(xs, y, clr="#444", lw=1.0):
+        shapes.append(dict(
+            type="line", x0=xs[0], y0=y, x1=xs[1], y1=y,
+            line=dict(color=clr, width=lw),
+        ))
+
+    def box(xs, y0, y1, txt, sz=9, clr="#222", bold=False):
+        """
+        常にラベルを表示。面積が小さい場合はフォントを縮小し、
+        極小（<0.8%）の場合は右外側に引き出し線で表示。
+        """
+        if y1 <= y0:
+            return
+        h   = y1 - y0
+        cx  = (xs[0] + xs[1]) / 2
+        cy  = (y0 + y1) / 2
+        t   = f"<b>{txt}</b>" if bold else txt
+
+        if h >= rev * 0.025:
+            actual_sz = sz
+        elif h >= rev * 0.008:
+            actual_sz = max(6, sz - 2)
+        else:
+            # 極小 → 右外側に引き出し線
+            anns.append(dict(
+                x=xs[1] + 3, y=cy,
+                text=txt.replace("<br>", " "),
+                showarrow=True, arrowhead=2, arrowsize=0.6,
+                ax=28, ay=0, arrowcolor="#666",
+                font=dict(size=7, color=clr),
+                xanchor="left", yanchor="middle",
+                bgcolor="rgba(255,255,255,0.85)", bordercolor="#aaa",
+                borderwidth=0.5, borderpad=2,
+            ))
+            return
+
+        anns.append(dict(
+            x=cx, y=cy, text=t, showarrow=False,
+            font=dict(size=actual_sz, color=clr),
+            xanchor="center", yanchor="middle", align="center",
+        ))
+
+    def ann_box(x, y, txt, sz=9, clr="#333", xa="center", ya="middle",
+                bg=None, bc=None, bold=False):
         t = f"<b>{txt}</b>" if bold else txt
         a = dict(x=x, y=y, text=t, showarrow=False,
                  font=dict(size=sz, color=clr),
@@ -117,23 +163,14 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
             a.update(bgcolor=bg, bordercolor=bc or "#888", borderwidth=1, borderpad=3)
         anns.append(a)
 
-    def box(xs, y0, y1, txt, sz=9, clr="#222", bold=False, min_r=0.04):
-        if y1 - y0 < rev * min_r or y1 <= y0:
-            return
-        ann((xs[0]+xs[1])/2, (y0+y1)/2, txt, sz, clr, bold=bold)
-
-    def hline(xs, y, clr="#444", lw=1.0):
-        shapes.append(dict(type="line", x0=xs[0], y0=y, x1=xs[1], y1=y,
-                           line=dict(color=clr, width=lw)))
-
     # ── BS 描画 ───────────────────────────────────────────────────
     rect(BS_A, ca_bot, ca_top, "#4472C4", "#2F528F")
     box( BS_A, ca_bot, ca_top, f"流動資産<br>{curr_a:,.0f}", 9, "white", True)
 
     rect(BS_A, fa_bot, fa_top, "#2E5A9E", "#1F3F72")
-    box( BS_A, fa_bot, fa_top, f"固定資産<br>{fix_a:,.0f}",  9, "white", True)
+    box( BS_A, fa_bot, fa_top, f"固定資産<br>{fix_a:,.0f}", 9, "white", True)
 
-    if def_a * sc > rev * 0.02:
+    if def_a * sc > 0:
         rect(BS_A, da_bot, da_top, "#A9C4E8", "#2F528F")
         box( BS_A, da_bot, da_top, f"繰延資産<br>{def_a:,.0f}", 8, "#1a1a1a")
 
@@ -141,26 +178,28 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
     box( BS_L, cl_bot, cl_top, f"流動負債<br>{curr_l:,.0f}", 9, "white", True)
 
     rect(BS_L, fl_bot, fl_top, "#C0392B", "#922B21")
-    box( BS_L, fl_bot, fl_top, f"固定負債<br>{fix_l:,.0f}",  9, "white", True)
+    box( BS_L, fl_bot, fl_top, f"固定負債<br>{fix_l:,.0f}", 9, "white", True)
 
     rect(BS_L, eq_bot, eq_top, "#27AE60", "#1E8449")
-    box( BS_L, eq_bot, eq_top, f"純資産<br>{eqy:,.0f}",      9, "white", True)
+    box( BS_L, eq_bot, eq_top, f"純資産<br>{eqy:,.0f}", 9, "white", True)
 
     # ── 売上高列（REV）────────────────────────────────────────────
     rect(REV, 0, rev, "#BDD7EE", "#2F528F")
-    # 営業外収益があれば上に積む
+    box( REV, 0, rev, f"売上高<br>{rev:,.0f}", 10, "#1f4e79", True)
+
+    # 営業外収益（売上高の上）
     if non_rev > 0:
         rect(REV, rev, rev + non_rev, "#DDEEFF", "#2F528F")
-        box( REV, rev, rev + non_rev, f"営外収益<br>{non_rev:,.0f}", 7, "#1a1a1a")
-    ann((REV[0]+REV[1])/2, rev / 2,
-        f"売上高<br>{rev:,.0f}", 9, "#1f4e79", bold=True)
+        box( REV, rev, rev + non_rev, f"営業外収益<br>{non_rev:,.0f}", 8, "#1a1a1a")
+
+    hline(REV, rev, "#2F528F", 1.5)
 
     # ── P/L メインブロック（変動費 / 粗利益）────────────────────
     rect(MAIN, var_bot, var_top, "#F4A460", "#C87941")
-    box( MAIN, var_bot, var_top, f"変動費<br>{var:,.0f}", 11, "white", True)
+    box( MAIN, var_bot, var_top, f"変動費<br>{var:,.0f}", 10, "white", True)
 
     rect(MAIN, gro_bot, gro_top, "#C8E6C9", "#4CAF50")
-    box( MAIN, gro_bot, gro_top, f"粗利益<br>{gross:,.0f}", 11, "#1a1a1a", True)
+    box( MAIN, gro_bot, gro_top, f"粗利益<br>{gross:,.0f}", 10, "#1a1a1a", True)
 
     hline(MAIN, gross, "#333", 1.2)
     hline(MAIN, rev,   "#333", 1.5)
@@ -170,7 +209,6 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
     box( FIX, fc_bot, fc_top, f"固定費<br>{fix:,.0f}", 9, "white", True)
 
     if overflow > 0:
-        # 固定費が粗利益を超えた分（赤字要因）
         rect(FIX, gross, gross + overflow, "#EF9A9A", "#C62828", 1.2)
         box( FIX, gross, gross + overflow, f"費用超過<br>{overflow:,.0f}", 8, "#7B0000")
     elif pr_top > pr_bot:
@@ -183,7 +221,7 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
     hline(FIX, gross, "#333", 1.2)
     hline(FIX, rev,   "#aaa", 0.5)
 
-    # ── サブ項目列（人件費・営業外費用・減価償却費）──────────────
+    # ── サブ項目列（人件費・営業外費用・減価償却費・その他固定費）
     if jinken > 0 and j_top > j_bot:
         rect(SUB, j_bot,  j_top,  "#FFC107", "#E6A800")
         box( SUB, j_bot,  j_top,  f"人件費<br>{jinken:,.0f}", 8, "#1a1a1a")
@@ -196,41 +234,45 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
         rect(SUB, dp_bot, dp_top, "#FF8A65", "#E64A19")
         box( SUB, dp_bot, dp_top, f"減価償却費<br>{deprec:,.0f}", 8, "white")
 
+    # その他固定費（残余、白い部分を解消）
+    if ot_top > ot_bot and other_fix > 0:
+        rect(SUB, ot_bot, ot_top, "#78909C", "#546E7A")
+        box( SUB, ot_bot, ot_top, f"その他固定費<br>{other_fix:,.0f}", 8, "white")
+
     hline(SUB, gross, "#aaa", 0.5)
+    hline(SUB, rev,   "#aaa", 0.5)
 
     # ── 経常利益列 ────────────────────────────────────────────────
-    if abs(ord_p) > rev * 0.002:
-        p_clr  = "#2E7D32" if ord_p >= 0 else "#C62828"
-        p_tclr = "white"
+    if abs(ord_p) > 0:
+        p_clr = "#2E7D32" if ord_p >= 0 else "#C62828"
         rect(RT, 0, abs(ord_p), p_clr)
         box( RT, 0, abs(ord_p),
-             f"{'経常利益' if ord_p >= 0 else '経常損失'}<br>{ord_p:,.0f}", 8, p_tclr)
+             f"{'経常利益' if ord_p >= 0 else '経常損失'}<br>{ord_p:,.0f}", 8, "white")
 
     # ── 当期純利益＋減価償却費列 ──────────────────────────────────
-    if abs(net) > rev * 0.001:
+    if abs(net) > 0:
         n_clr = "#1565C0" if net >= 0 else "#BF360C"
         rect(CF, 0, abs(net), n_clr)
-        box( CF, 0, abs(net),
-             f"当期純利益<br>{net:,.0f}", 8, "white")
+        box( CF, 0, abs(net), f"当期純利益<br>{net:,.0f}", 8, "white")
 
     if deprec > 0 and net >= 0:
         rect(CF, abs(net), abs(net) + deprec, "#29B6F6", "#0277BD")
         box( CF, abs(net), abs(net) + deprec, f"減価償却費<br>{deprec:,.0f}", 7, "white")
 
     # ── 指標アノテーション ────────────────────────────────────────
-    ann((MAIN[0]+MAIN[1])/2, -rev * 0.09,
-        f"粗利益率=粗利益÷売上高　{gross_r:.1%}",
-        9, "#333", bg="#FFFACD", bc="#888")
+    ann_box((MAIN[0]+MAIN[1])/2, -rev * 0.09,
+            f"粗利益率=粗利益÷売上高　{gross_r:.1%}",
+            9, "#333", bg="#FFFACD", bc="#888")
 
     if jinken > 0 and gross > 0:
-        ann((FIX[0]+SUB[1])/2, -rev * 0.09,
-            f"労働分配率=人件費/粗利　{rodo:.1%}",
-            9, "#333", bg="#E3F2FD", bc="#888")
+        ann_box((FIX[0]+SUB[1])/2, -rev * 0.09,
+                f"労働分配率=人件費/粗利　{rodo:.1%}",
+                9, "#333", bg="#E3F2FD", bc="#888")
 
     if bep is not None:
-        ann(W, rev * 1.12,
-            f"損益分岐点売上高=固定費÷粗利益率　{bep:,.0f} {unit_label}",
-            9, "#B71C1C", xa="right", ya="top", bg="#FFF9C4", bc="#C00")
+        ann_box(W, rev * 1.12,
+                f"損益分岐点売上高=固定費÷粗利益率　{bep:,.0f} {unit_label}",
+                9, "#B71C1C", xa="right", ya="top", bg="#FFF9C4", bc="#C00")
 
     # ── Figure ───────────────────────────────────────────────────
     y_max = rev + max(non_rev, 0)
@@ -265,7 +307,6 @@ def page_financial():
         unit_label = c1.selectbox("単位", ["千円", "百万円", "億円"])
         n_years    = c2.selectbox("決算期数", [1, 2, 3], index=2)
 
-        # 西暦入力（プレフィックス廃止）
         yr_cols = st.columns(3)
         years = []
         for i in range(3):
@@ -347,7 +388,6 @@ def page_financial():
                         label, value=PL_DEF[key][i], step=1000,
                         key=f"pl_{key}_{i}", format="%d")
 
-    # ── ブロック図表示 ─────────────────────────────────────────────
     st.markdown(f"## 財務分析ブロック図　（単位：{unit_label}）")
 
     for i in range(n_years):

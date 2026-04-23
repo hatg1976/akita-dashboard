@@ -14,6 +14,8 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
+from financial_diagram import page_financial
+
 from collector import (
     get_sample_population,
     get_sample_migration,
@@ -73,7 +75,8 @@ page = st.sidebar.selectbox(
     "表示するデータ",
     ["📊 総合概要", "👥 人口動態", "🏭 産業構造", "💰 経済指標", "🏘️ 市町村比較",
      "🍱 食品製造業", "🏪 商店街", "⚡ 再生可能エネルギー",
-     "🏛️ 政策提言", "📚 事例研究DB", "💴 補助金カレンダー", "📝 施策メモ"],
+     "🏛️ 政策提言", "📚 事例研究DB", "💴 補助金カレンダー", "📝 施策メモ",
+     "💹 決算書図解"],
 )
 
 st.sidebar.markdown("---")
@@ -1368,3 +1371,5 @@ elif page == "💴 補助金カレンダー":
     page_subsidies()
 elif page == "📝 施策メモ":
     page_notes()
+elif page == "💹 決算書図解":
+    page_financial()

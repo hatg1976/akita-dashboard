@@ -36,7 +36,7 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
     net       = pre_tax - tax
     bep       = fix / gross_r if gross_r > 0 else None
     rodo      = jinken / gross if gross > 0 else 0
-    other_fix = max(0.0, fix - jinken - deprec - non_exp)
+    other_fix = max(0.0, fix - jinken - deprec)
     overflow  = max(0.0, fix - gross)   # 固定費が粗利益を超えた分
 
     # ── BS Y 座標（実額・スケールなし）────────────────────────────
@@ -55,7 +55,7 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
     fc_in_top = gross;  fc_in_bot = 0.0          # 粗利益内の部分
     ov_top    = 0.0;    ov_bot    = -overflow     # 費用超過（y<0）
 
-    # SUB列：上から 人件費 → 減価償却費 → その他固定費 → 営業外費用
+    # SUB列：上から 人件費 → 減価償却費 → その他固定費
     sy = gross
     def _take(h):
         nonlocal sy
@@ -64,17 +64,10 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
     j_top,  j_bot  = _take(jinken)
     dp_top, dp_bot = _take(deprec)
     ot_top, ot_bot = _take(other_fix)
-    ne_top, ne_bot = _take(non_exp)
-    # ne_bot ≈ gross - fix = -overflow ✓
-
-    # RT列（経常利益/損失）：損失は y<0
-    # 営業外収益は y=0 の一番下に表示
-    # CF列（当期純利益/損失）：損失は y<0
     # 特別利益は y=0 の一番下に表示
 
     # Y 軸範囲
-    main_bot = -(non_rev + sp_gn)
-    y_neg = min(0.0, ov_bot, ord_p if ord_p < 0 else 0, net if net < 0 else 0, main_bot)
+    y_neg = min(0.0, ov_bot, ord_p if ord_p < 0 else 0, net if net < 0 else 0)
     y_pos = max(rev + max(non_rev, 0.0), total_a)
     y_min = y_neg * 1.35 if y_neg < 0 else -rev * 0.05
     y_max = y_pos * 1.18
@@ -145,33 +138,18 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
     rect(BS_L, eq_bot, eq_top, "#27AE60", "#1E8449")
     box( BS_L, eq_bot, eq_top, f"純資産<br>{eqy:,.0f}",      9, "white", True)
 
-    # ── REV 列（売上高 + 営業外収益を一番下に）───────────────────
-    # 営業外収益（一番下）
-    if non_rev > 0:
-        rect(REV, 0, non_rev, "#A5D6A7", "#388E3C")
-        box( REV, 0, non_rev, f"営業外収益<br>{non_rev:,.0f}", 8, "#1a1a1a")
-    # 売上高（その上）
-    rect(REV, non_rev, non_rev + rev, "#BDD7EE", "#2F528F")
-    box( REV, non_rev, non_rev + rev, f"売上高<br>{rev:,.0f}", 10, "#1f4e79", True)
-    hline(REV, non_rev + rev, "#2F528F", 1.5)
-    hline(REV, non_rev,       "#2F528F", 1.0)
+    # ── REV 列（売上高）─────────────────────────────────────────
+    rect(REV, 0, rev, "#BDD7EE", "#2F528F")
+    box( REV, 0, rev, f"売上高<br>{rev:,.0f}", 10, "#1f4e79", True)
+    hline(REV, rev, "#2F528F", 1.5)
 
-    # ── MAIN 列（変動費 / 粗利益 / 営業外収益 / 特別利益）───────────
+    # ── MAIN 列（変動費 / 粗利益）────────────────────────────────
     rect(MAIN, var_bot, var_top, "#F4A460", "#C87941")
     box( MAIN, var_bot, var_top, f"変動費<br>{var:,.0f}", 10, "white", True)
     rect(MAIN, gro_bot, gro_top, "#C8E6C9", "#4CAF50")
     box( MAIN, gro_bot, gro_top, f"粗利益<br>{gross:,.0f}", 10, "#1a1a1a", True)
     hline(MAIN, gross, "#333", 1.2)
     hline(MAIN, rev,   "#333", 1.5)
-    # 営業外収益：y=0 より下
-    if non_rev > 0:
-        rect(MAIN, -non_rev, 0, "#A5D6A7", "#388E3C")
-        box( MAIN, -non_rev, 0, f"営業外収益 {non_rev:,.0f}", 8, "#1a1a1a", oneline=True)
-    # 特別利益：営業外収益のさらに下
-    if sp_gn > 0:
-        rect(MAIN, -(non_rev + sp_gn), -non_rev, "#81D4FA", "#0288D1")
-        box( MAIN, -(non_rev + sp_gn), -non_rev, f"特別利益 {sp_gn:,.0f}", 8, "#1a1a1a", oneline=True)
-    hline(MAIN, 0, "#666", 0.8)
 
     # ── FIX 列（固定費 + 費用超過を y<0 に）──────────────────────
     rect(FIX, fc_in_bot, fc_in_top, "#CD853F", "#8B5E3C")
@@ -195,45 +173,25 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
         rect(SUB, ot_bot, ot_top, "#78909C", "#546E7A")
         box( SUB, ot_bot, ot_top, f"その他固定費 {other_fix:,.0f}", 8, "white", oneline=True)
 
-    if non_exp > 0:
-        rect(SUB, ne_bot, ne_top, "#AB47BC", "#7B1FA2")
-        box( SUB, ne_bot, ne_top, f"営業外費用 {non_exp:,.0f}", 8, "white", oneline=True)
-
     hline(SUB, gross, "#333", 1.0)
     hline(SUB, 0,     "#666", 0.8)
     hline(SUB, rev,   "#aaa", 0.4)
 
-    # ── RT 列（経常利益/損失 + 営業外収益を一番下に）─────────────
-    # 営業外収益（y=0 の一番下）
-    if non_rev > 0:
-        rect(RT, 0, non_rev, "#A5D6A7", "#388E3C")
-        box( RT, 0, non_rev, f"営業外収益 {non_rev:,.0f}", 7, "#1a1a1a", oneline=True)
-
+    # ── RT 列（経常利益/損失）────────────────────────────────────
     if ord_p > 0:
-        # 利益（営業外収益の上）
-        if ord_p > non_rev:
-            rect(RT, non_rev, ord_p, "#2E7D32")
-        box( RT, max(0, non_rev), ord_p, f"経常利益 {ord_p:,.0f}", 8, "white", oneline=True)
+        rect(RT, 0, ord_p, "#2E7D32")
+        box( RT, 0, ord_p, f"経常利益 {ord_p:,.0f}", 8, "white", oneline=True)
     elif ord_p < 0:
-        # 損失（y<0）
         rect(RT, ord_p, 0, "#C62828")
         box( RT, ord_p, 0, f"経常損失 {ord_p:,.0f}", 8, "white", oneline=True)
 
     hline(RT, 0, "#666", 0.8)
 
-    # ── CF 列（当期純利益/損失 + 特別利益を一番下に）────────────
-    # 特別利益（y=0 の一番下）
-    if sp_gn > 0:
-        rect(CF, 0, sp_gn, "#81D4FA", "#0288D1")
-        box( CF, 0, sp_gn, f"特別利益 {sp_gn:,.0f}", 7, "#1a1a1a", oneline=True)
-
+    # ── CF 列（当期純利益/損失）──────────────────────────────────
     if net > 0:
-        # 利益（特別利益の上）
-        if net > sp_gn:
-            rect(CF, sp_gn, net, "#1565C0")
-        box( CF, max(0, sp_gn), net, f"当期純利益 {net:,.0f}", 8, "white", oneline=True)
+        rect(CF, 0, net, "#1565C0")
+        box( CF, 0, net, f"当期純利益 {net:,.0f}", 8, "white", oneline=True)
     elif net < 0:
-        # 損失（y<0）
         rect(CF, net, 0, "#BF360C")
         box( CF, net, 0, f"当期純損失 {net:,.0f}", 8, "white", oneline=True)
 

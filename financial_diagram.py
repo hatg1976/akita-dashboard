@@ -229,22 +229,20 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
 
     hline(CF, 0, "#666", 0.8)
 
-    # ── 指標アノテーション ─────────────────────────────────────────
-    # 粗利益率：REV列とMAIN列の下に
-    ann_y = y_min + rev * 0.06
+    # ── 指標アノテーション（すべて同じ高さ・上部に配置）─────────────
+    ann_y = y_max * 0.97
+
     _label((REV[0]+MAIN[1])/2, ann_y,
            f"粗利益率=粗利益÷売上高　{gross_r:.1%}",
-           9, "#333", bg="#FFFACD", bc="#888")
+           9, "#333", xa="center", ya="top", bg="#FFFACD", bc="#888")
 
-    # 労働分配率：FIX〜SUB列の下に
     if jinken > 0 and gross > 0:
         _label((FIX[0]+SUB[1])/2, ann_y,
                f"労働分配率=人件費/粗利　{rodo:.1%}",
-               9, "#333", bg="#E3F2FD", bc="#888")
+               9, "#333", xa="center", ya="top", bg="#E3F2FD", bc="#888")
 
-    # 損益分岐点：右上
     if bep is not None:
-        _label(W, y_max * 0.97,
+        _label(W, ann_y,
                f"損益分岐点売上高=固定費÷粗利益率　{bep:,.0f} {unit_label}",
                9, "#B71C1C", xa="right", ya="top", bg="#FFF9C4", bc="#C00")
 

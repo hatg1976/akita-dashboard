@@ -128,7 +128,8 @@ page = st.sidebar.selectbox(
      "🍱 食品製造業", "🏪 商店街",
      "📈 地域市場シェア分析",
      "🏛️ 政策提言", "📚 事例研究DB", "💴 補助金カレンダー", "📝 施策メモ",
-     "🔌 e-Stat API連携"],
+     "🔌 e-Stat API連携",
+     "💹 決算書図解"],
 )
 
 st.sidebar.markdown("---")
@@ -2625,3 +2626,6 @@ elif page == "📝 施策メモ":
     page_notes()
 elif page == "🔌 e-Stat API連携":
     page_estat()
+elif page == "💹 決算書図解":
+    from financial_diagram import page_financial
+    page_financial()

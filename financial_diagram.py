@@ -136,78 +136,78 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
                              bordercolor="#aaa", borderwidth=0.5, borderpad=2))
 
     # ── BS 描画 ─────────────────────────────────────────────────────
-    rect(BS_A, ca_bot, ca_top, "#4472C4", "#2F528F")
+    rect(BS_A, ca_bot, ca_top, "#888888", "#555")
     box( BS_A, ca_bot, ca_top, f"流動資産<br>{curr_a:,.0f}", 11, "white", True)
-    rect(BS_A, fa_bot, fa_top, "#2E5A9E", "#1F3F72")
+    rect(BS_A, fa_bot, fa_top, "#555555", "#333")
     box( BS_A, fa_bot, fa_top, f"固定資産<br>{fix_a:,.0f}",  11, "white", True)
     if def_a > 0:
-        rect(BS_A, da_bot, da_top, "#A9C4E8", "#2F528F")
-        box( BS_A, da_bot, da_top, f"繰延資産<br>{def_a:,.0f}", 10, "#1a1a1a")
+        rect(BS_A, da_bot, da_top, "#BBBBBB", "#888")
+        box( BS_A, da_bot, da_top, f"繰延資産<br>{def_a:,.0f}", 10, "#333")
 
-    rect(BS_L, cl_bot, cl_top, "#FF6B6B", "#C0392B")
+    rect(BS_L, cl_bot, cl_top, "#AAAAAA", "#777")
     box( BS_L, cl_bot, cl_top, f"流動負債<br>{curr_l:,.0f}", 11, "white", True)
-    rect(BS_L, fl_bot, fl_top, "#C0392B", "#922B21")
+    rect(BS_L, fl_bot, fl_top, "#777777", "#444")
     box( BS_L, fl_bot, fl_top, f"固定負債<br>{fix_l:,.0f}",  11, "white", True)
     if eq_negative:
-        rect(BS_A, eq_bot, eq_top, "#E57373", "#C62828")
+        rect(BS_A, eq_bot, eq_top, "#444444", "#222")
         box( BS_A, eq_bot, eq_top, f"▲純資産<br>{eqy:,.0f}", 11, "white", True)
     else:
-        rect(BS_L, eq_bot, eq_top, "#27AE60", "#1E8449")
+        rect(BS_L, eq_bot, eq_top, "#444444", "#222")
         box( BS_L, eq_bot, eq_top, f"純資産<br>{eqy:,.0f}",  11, "white", True)
 
     # ── REV 列（売上高）─────────────────────────────────────────
-    rect(REV, 0, rev, "#BDD7EE", "#2F528F")
-    box( REV, 0, rev, f"売上高<br>{rev:,.0f}", 12, "#1f4e79", True)
-    hline(REV, rev, "#2F528F", 1.5)
+    rect(REV, 0, rev, "#CCCCCC", "#888")
+    box( REV, 0, rev, f"売上高<br>{rev:,.0f}", 12, "#222", True)
+    hline(REV, rev, "#666", 1.5)
 
     # ── MAIN 列（変動費 / 粗利益）────────────────────────────────
-    rect(MAIN, var_bot, var_top, "#F4A460", "#C87941")
+    rect(MAIN, var_bot, var_top, "#999999", "#666")
     box( MAIN, var_bot, var_top, f"変動費<br>{var:,.0f}", 12, "white", True)
-    rect(MAIN, gro_bot, gro_top, "#C8E6C9", "#4CAF50")
-    box( MAIN, gro_bot, gro_top, f"粗利益<br>{gross:,.0f}", 12, "#1a1a1a", True)
-    hline(MAIN, gross, "#333", 1.2)
-    hline(MAIN, rev,   "#333", 1.5)
+    rect(MAIN, gro_bot, gro_top, "#DDDDDD", "#999")
+    box( MAIN, gro_bot, gro_top, f"粗利益<br>{gross:,.0f}", 12, "#222", True)
+    hline(MAIN, gross, "#555", 1.2)
+    hline(MAIN, rev,   "#555", 1.5)
 
     # ── FIX 列（fix<=gross→0〜fix、fix>gross→(gross-fix)〜gross）──
-    fix_top = min(fix, gross)   # 上端
-    fix_bot = -overflow          # fix<=gross なら0、fix>gross なら負値
-    rect(FIX, fix_bot, fix_top, "#CD853F", "#8B5E3C")
+    fix_top = min(fix, gross)
+    fix_bot = -overflow
+    rect(FIX, fix_bot, fix_top, "#777777", "#444")
     box( FIX, fix_bot, fix_top, f"固定費<br>{fix:,.0f}", 11, "white", True)
     hline(FIX, 0, "#666", 0.8)
 
-    # ── SUB 列（人件費→減価償却費→その他固定費→営業外費用）──────
+    # ── SUB 列（人件費→減価償却費→その他固定費）──────────────────
     if jinken > 0 and j_top > j_bot:
-        rect(SUB, j_bot,  j_top,  "#FFC107", "#E6A800")
-        box( SUB, j_bot,  j_top,  f"人件費 {jinken:,.0f}", 10, "#1a1a1a", oneline=True)
+        rect(SUB, j_bot,  j_top,  "#AAAAAA", "#777")
+        box( SUB, j_bot,  j_top,  f"人件費 {jinken:,.0f}", 10, "white", oneline=True)
 
     if deprec > 0 and dp_top > dp_bot:
-        rect(SUB, dp_bot, dp_top, "#FF8A65", "#E64A19")
+        rect(SUB, dp_bot, dp_top, "#888888", "#555")
         box( SUB, dp_bot, dp_top, f"減価償却費 {deprec:,.0f}", 10, "white", oneline=True)
 
     if other_fix > 0 and ot_top > ot_bot:
-        rect(SUB, ot_bot, ot_top, "#78909C", "#546E7A")
+        rect(SUB, ot_bot, ot_top, "#666666", "#333")
         box( SUB, ot_bot, ot_top, f"その他固定費 {other_fix:,.0f}", 10, "white", oneline=True)
 
-    hline(SUB, fix_top_coord, "#333", 1.0)
+    hline(SUB, fix_top_coord, "#555", 1.0)
     hline(SUB, 0,             "#666", 0.8)
 
     # ── RT 列（経常利益/損失）────────────────────────────────────
     if ord_p > 0:
-        rect(RT, 0, ord_p, "#2E7D32")
+        rect(RT, 0, ord_p, "#555555", "#333")
         box( RT, 0, ord_p, f"経常利益 {ord_p:,.0f}", 10, "white", oneline=True)
     elif ord_p < 0:
-        rect(RT, ord_p, 0, "#C62828")
-        box( RT, ord_p, 0, f"経常損失 {ord_p:,.0f}", 10, "white", oneline=True)
+        rect(RT, ord_p, 0, "#AAAAAA", "#777")
+        box( RT, ord_p, 0, f"経常損失 {ord_p:,.0f}", 10, "#222", oneline=True)
 
     hline(RT, 0, "#666", 0.8)
 
     # ── CF 列（当期純利益/損失）──────────────────────────────────
     if net > 0:
-        rect(CF, 0, net, "#1565C0")
+        rect(CF, 0, net, "#333333", "#111")
         box( CF, 0, net, f"当期純利益 {net:,.0f}", 10, "white", oneline=True)
     elif net < 0:
-        rect(CF, net, 0, "#BF360C")
-        box( CF, net, 0, f"当期純損失 {net:,.0f}", 10, "white", oneline=True)
+        rect(CF, net, 0, "#BBBBBB", "#888")
+        box( CF, net, 0, f"当期純損失 {net:,.0f}", 10, "#222", oneline=True)
 
     hline(CF, 0, "#666", 0.8)
 

@@ -43,9 +43,19 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
     ca_top = total_a;   ca_bot = total_a - curr_a
     fa_top = ca_bot;    fa_bot = def_a
     da_top = def_a;     da_bot = 0.0
-    cl_top = total_a;   cl_bot = total_a - curr_l
-    fl_top = cl_bot;    fl_bot = eqy
-    eq_top = eqy;       eq_bot = 0.0
+
+    if eqy >= 0:
+        # 通常：純資産は負債列の下部
+        cl_top = total_a;   cl_bot = total_a - curr_l
+        fl_top = cl_bot;    fl_bot = eqy
+        eq_top = eqy;       eq_bot = 0.0
+        eq_negative = False
+    else:
+        # 純資産マイナス：負債列は eqy〜total_a、純資産は資産列の下部に表示
+        fl_bot = eqy;       fl_top = eqy + fix_l
+        cl_bot = fl_top;    cl_top = total_a
+        eq_top = 0.0;       eq_bot = eqy          # 資産列の y=eqy〜0
+        eq_negative = True
 
     # ── P/L Y 座標（売上高=100%基準）──────────────────────────────
     var_top = rev;    var_bot = gross
@@ -67,7 +77,8 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
     # 特別利益は y=0 の一番下に表示
 
     # Y 軸範囲
-    y_neg = min(0.0, ov_bot, ord_p if ord_p < 0 else 0, net if net < 0 else 0)
+    y_neg = min(0.0, ov_bot, ord_p if ord_p < 0 else 0, net if net < 0 else 0,
+                eqy if eqy < 0 else 0)
     y_pos = max(rev + max(non_rev, 0.0), total_a)
     y_min = y_neg * 1.35 if y_neg < 0 else -rev * 0.05
     y_max = y_pos * 1.18
@@ -135,8 +146,13 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
     box( BS_L, cl_bot, cl_top, f"流動負債<br>{curr_l:,.0f}", 9, "white", True)
     rect(BS_L, fl_bot, fl_top, "#C0392B", "#922B21")
     box( BS_L, fl_bot, fl_top, f"固定負債<br>{fix_l:,.0f}",  9, "white", True)
-    rect(BS_L, eq_bot, eq_top, "#27AE60", "#1E8449")
-    box( BS_L, eq_bot, eq_top, f"純資産<br>{eqy:,.0f}",      9, "white", True)
+    if eq_negative:
+        # 純資産マイナス：資産列の下部（y=eqy〜0）に赤系で表示
+        rect(BS_A, eq_bot, eq_top, "#E57373", "#C62828")
+        box( BS_A, eq_bot, eq_top, f"▲純資産<br>{eqy:,.0f}", 9, "white", True)
+    else:
+        rect(BS_L, eq_bot, eq_top, "#27AE60", "#1E8449")
+        box( BS_L, eq_bot, eq_top, f"純資産<br>{eqy:,.0f}",  9, "white", True)
 
     # ── REV 列（売上高）─────────────────────────────────────────
     rect(REV, 0, rev, "#BDD7EE", "#2F528F")
@@ -248,7 +264,7 @@ def page_financial():
         years = []
         for i in range(3):
             with yr_cols[i]:
-                y = st.number_input(f"第{i+1}期（西暦）", value=2022+i,
+                y = st.number_input(f"第{i+1}期（西暦）", value=2023+i,
                     min_value=1900, max_value=2100, step=1,
                     disabled=(i >= n_years), key=f"year_{i}")
                 years.append(int(y))
@@ -256,6 +272,7 @@ def page_financial():
                     if st.button(f"🗑️ 第{i+1}期をクリア", key=f"clear_{i}"):
                         for k in _BS_KEYS:
                             st.session_state[f"bs_{k}_{i}"] = 0
+                        st.session_state[f"bs_純資産_{i}"] = 0
                         for k in _PL_KEYS:
                             st.session_state[f"pl_{k}_{i}"] = 0
                         st.rerun()
@@ -265,24 +282,24 @@ def page_financial():
         tab_bs, tab_pl = st.tabs(["📋 貸借対照表（BS）", "📈 損益計算書（P/L）"])
 
         BS_DEF = {
-            "流動資産": [650444, 660373, 567365],
-            "固定資産": [398050, 392020, 389148],
-            "繰延資産": [0, 0, 0],
-            "流動負債": [509000, 508291, 371681],
-            "固定負債": [408000, 406190, 444266],
-            "純資産":   [131494, 137912, 140566],
+            "流動資産": [650, 660, 567],
+            "固定資産": [398, 392, 389],
+            "繰延資産": [0,   0,   0  ],
+            "流動負債": [509, 508, 372],
+            "固定負債": [408, 406, 444],
+            "純資産":   [131, 138, 141],
         }
         PL_DEF = {
-            "売上高":     [1321456, 1322205, 1326906],
-            "変動費":     [857745,  836013,  860135],
-            "固定費":     [491300,  490661,  483706],
-            "営業外収益": [15445,   11144,   22940],
-            "営業外費用": [54355,   57319,   60437],
-            "特別利益":   [2100,    2135,    500],
-            "特別損失":   [0,       0,       0],
-            "法人税等":   [2544,    6704,    3851],
-            "人件費":     [242058,  243446,  210261],
-            "減価償却費": [49500,   48057,   47990],
+            "売上高":     [1321, 1322, 1327],
+            "変動費":     [858,  836,  860 ],
+            "固定費":     [491,  491,  484 ],
+            "営業外収益": [15,   11,   23  ],
+            "営業外費用": [54,   57,   60  ],
+            "特別利益":   [2,    2,    1   ],
+            "特別損失":   [0,    0,    0   ],
+            "法人税等":   [3,    7,    4   ],
+            "人件費":     [242,  243,  210 ],
+            "減価償却費": [50,   48,   48  ],
         }
 
         bs = {k: list(v) for k, v in BS_DEF.items()}
@@ -296,7 +313,7 @@ def page_financial():
                 for key in ["流動資産", "固定資産", "繰延資産"]:
                     bs[key][i] = col.number_input(key, value=BS_DEF[key][i],
                         min_value=0, max_value=9_999_999_999,
-                        step=1000, key=f"bs_{key}_{i}", format="%d")
+                        step=1, key=f"bs_{key}_{i}", format="%d")
                 col.metric("資産合計",
                     f"{sum(bs[k][i] for k in ['流動資産','固定資産','繰延資産']):,.0f}")
 
@@ -304,10 +321,13 @@ def page_financial():
             cols2 = st.columns(n_years)
             for i, col in enumerate(cols2):
                 col.markdown(f"**{year_labels[i]}**")
-                for key in ["流動負債", "固定負債", "純資産"]:
+                for key in ["流動負債", "固定負債"]:
                     bs[key][i] = col.number_input(key, value=BS_DEF[key][i],
                         min_value=0, max_value=9_999_999_999,
-                        step=1000, key=f"bs_{key}_{i}", format="%d")
+                        step=1, key=f"bs_{key}_{i}", format="%d")
+                bs["純資産"][i] = col.number_input("純資産", value=BS_DEF["純資産"][i],
+                    min_value=-9_999_999_999, max_value=9_999_999_999,
+                    step=1, key=f"bs_純資産_{i}", format="%d")
                 col.metric("負債・純資産合計",
                     f"{sum(bs[k][i] for k in ['流動負債','固定負債','純資産']):,.0f}")
 
@@ -330,7 +350,7 @@ def page_financial():
                 for key, label in PL_FIELDS:
                     pl[key][i] = col.number_input(label, value=PL_DEF[key][i],
                         min_value=0, max_value=9_999_999_999,
-                        step=1000, key=f"pl_{key}_{i}", format="%d")
+                        step=1, key=f"pl_{key}_{i}", format="%d")
 
     st.markdown(f"## 財務分析ブロック図　（単位：{unit_label}）")
     for i in range(n_years):

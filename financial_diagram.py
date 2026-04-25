@@ -167,8 +167,8 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
     hline(MAIN, gross, "#333", 1.2)
     hline(MAIN, rev,   "#333", 1.5)
 
-    # ── FIX 列（固定費：超過分は y<0 に延長）────────────────────
-    fix_bot = -overflow  # overflow=0 なら 0、超過あれば負値
+    # ── FIX 列（固定費：高さ=fix、上端=gross、超過分は y<0 に延長）──
+    fix_bot = gross - fix  # fix<=gross なら正値、fix>gross なら負値
     rect(FIX, fix_bot, gross, "#CD853F", "#8B5E3C")
     box( FIX, fix_bot, gross, f"固定費<br>{fix:,.0f}", 9, "white", True)
     hline(FIX, gross, "#333", 1.0)

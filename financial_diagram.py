@@ -67,14 +67,16 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
 
     # SUB列：上から 人件費 → 減価償却費 → その他固定費（FIX列と同じ高さ）
     fix_top_coord = min(fix, gross)
+    # fix > gross のとき内訳合計が fix_top_coord を超えるので比例縮小
+    sub_scale = fix_top_coord / fix if fix > 0 else 1.0
     sy = fix_top_coord
     def _take(h):
         nonlocal sy
         top = sy;  bot = sy - max(0.0, h);  sy = bot;  return top, bot
 
-    j_top,  j_bot  = _take(jinken)
-    dp_top, dp_bot = _take(deprec)
-    ot_top, ot_bot = _take(other_fix)
+    j_top,  j_bot  = _take(jinken    * sub_scale)
+    dp_top, dp_bot = _take(deprec    * sub_scale)
+    ot_top, ot_bot = _take(other_fix * sub_scale)
     # 特別利益は y=0 の一番下に表示
 
     # Y 軸範囲
@@ -171,8 +173,7 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
     fix_top = min(fix, gross)   # 上端：粗利益を超えない
     rect(FIX, 0, fix_top, "#CD853F", "#8B5E3C")
     box( FIX, 0, fix_top, f"固定費<br>{fix:,.0f}", 11, "white", True)
-    hline(FIX, gross, "#333", 1.0)
-    hline(FIX, 0,     "#666", 0.8)
+    hline(FIX, 0, "#666", 0.8)
 
     # ── SUB 列（人件費→減価償却費→その他固定費→営業外費用）──────
     if jinken > 0 and j_top > j_bot:
@@ -214,17 +215,17 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
     ann_y = y_max * 0.97
 
     _label((REV[0]+MAIN[1])/2, ann_y,
-           f"粗利益率=粗利益÷売上高　{gross_r:.1%}",
+           f"粗利益率=粗利益÷売上高<br>{gross_r:.1%}",
            11, "#333", xa="center", ya="top", bg="#FFFACD", bc="#888")
 
     if jinken > 0 and gross > 0:
         _label((FIX[0]+SUB[1])/2, ann_y,
-               f"労働分配率=人件費/粗利　{rodo:.1%}",
+               f"労働分配率=人件費÷粗利益<br>{rodo:.1%}",
                11, "#333", xa="center", ya="top", bg="#E3F2FD", bc="#888")
 
     if bep is not None:
         _label(W, ann_y,
-               f"損益分岐点売上高=固定費÷粗利益率　{bep:,.0f} {unit_label}",
+               f"損益分岐点売上高=固定費÷粗利益率<br>{bep:,.0f} {unit_label}",
                11, "#B71C1C", xa="right", ya="top", bg="#FFF9C4", bc="#C00")
 
     # ── Figure ────────────────────────────────────────────────────
@@ -352,7 +353,7 @@ def page_financial():
                         min_value=0, max_value=9_999_999_999,
                         step=1, key=f"pl_{key}_{i}", format="%d")
 
-    st.markdown(f"## 財務分析ブロック図　（単位：{unit_label}）")
+    st.markdown(f"## 財務状況　（単位：{unit_label}）")
     for i in range(n_years):
         bs_yr = {k: bs[k][i] for k in bs}
         pl_yr = {k: pl[k][i] for k in pl}

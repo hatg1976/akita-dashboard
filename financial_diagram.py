@@ -175,9 +175,9 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
     # ── FIX 列（fix<=gross→0〜fix、fix>gross→(gross-fix)〜gross）──
     fix_top = min(fix, gross)
     fix_bot = -overflow
-    rect(FIX, fix_bot, fix_top, PL, BDR)
+    rect(FIX, fix_bot, fix_top, PL, BDR, 1.0)
     box( FIX, fix_bot, fix_top, f"固定費<br>{fix:,.0f}", 11, "#222", True)
-    hline(FIX, 0, BDR, 0.8)
+    hline(FIX, 0, BDR, 1.0)
 
     # ── SUB 列（人件費→減価償却費→その他固定費）──────────────────
     if jinken > 0 and j_top > j_bot:
@@ -292,12 +292,12 @@ def page_financial():
             "繰延資産": [0,   0,   0  ],
             "流動負債": [509, 508, 372],
             "固定負債": [408, 406, 444],
-            "純資産":   [131, 138, 141],
+            "純資産":   [131, 138, 140],
         }
         PL_DEF = {
             "売上高":     [1321, 1322, 1327],
             "変動費":     [858,  836,  860 ],
-            "固定費":     [491,  491,  484 ],
+            "固定費":     [420,  491,  484 ],
             "営業外収益": [15,   11,   23  ],
             "営業外費用": [54,   57,   60  ],
             "特別利益":   [2,    2,    1   ],

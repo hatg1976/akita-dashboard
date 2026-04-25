@@ -65,8 +65,9 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
     fc_in_top = gross;  fc_in_bot = 0.0          # 粗利益内の部分
     ov_top    = 0.0;    ov_bot    = -overflow     # 費用超過（y<0）
 
-    # SUB列：上から 人件費 → 減価償却費 → その他固定費
-    sy = gross
+    # SUB列：上から 人件費 → 減価償却費 → その他固定費（FIX列と同じ高さ）
+    fix_top_coord = min(fix, gross)
+    sy = fix_top_coord
     def _take(h):
         nonlocal sy
         top = sy;  bot = sy - max(0.0, h);  sy = bot;  return top, bot
@@ -186,8 +187,8 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
         rect(SUB, ot_bot, ot_top, "#78909C", "#546E7A")
         box( SUB, ot_bot, ot_top, f"その他固定費 {other_fix:,.0f}", 10, "white", oneline=True)
 
-    hline(SUB, gross, "#333", 1.0)
-    hline(SUB, 0,     "#666", 0.8)
+    hline(SUB, fix_top_coord, "#333", 1.0)
+    hline(SUB, 0,             "#666", 0.8)
 
     # ── RT 列（経常利益/損失）────────────────────────────────────
     if ord_p > 0:

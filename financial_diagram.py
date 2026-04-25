@@ -65,18 +65,17 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
     fc_in_top = gross;  fc_in_bot = 0.0          # 粗利益内の部分
     ov_top    = 0.0;    ov_bot    = -overflow     # 費用超過（y<0）
 
-    # SUB列：上から 人件費 → 減価償却費 → その他固定費（FIX列と同じ高さ）
+    # SUB列：FIX列と上下位置を完全一致させる
+    # fix_top=min(fix,gross)、fix_bot=-overflow → 高さ=fix、内訳合計=fix なので丁度収まる
     fix_top_coord = min(fix, gross)
-    # fix > gross のとき内訳合計が fix_top_coord を超えるので比例縮小
-    sub_scale = fix_top_coord / fix if fix > 0 else 1.0
     sy = fix_top_coord
     def _take(h):
         nonlocal sy
         top = sy;  bot = sy - max(0.0, h);  sy = bot;  return top, bot
 
-    j_top,  j_bot  = _take(jinken    * sub_scale)
-    dp_top, dp_bot = _take(deprec    * sub_scale)
-    ot_top, ot_bot = _take(other_fix * sub_scale)
+    j_top,  j_bot  = _take(jinken)
+    dp_top, dp_bot = _take(deprec)
+    ot_top, ot_bot = _take(other_fix)
     # 特別利益は y=0 の一番下に表示
 
     # Y 軸範囲

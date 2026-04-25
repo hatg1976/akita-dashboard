@@ -625,22 +625,22 @@ def get_subsidies() -> pd.DataFrame:
             "https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/koyou_roudou/koyou/kyufukin/jinzaikakuho.html",
             "https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/koyou_roudou/part_haken/jigyounushi/career.html",
             # 秋田県産業労働部
-            "https://www.pref.akita.lg.jp/pages/archive/36490",
-            "https://www.pref.akita.lg.jp/pages/archive/36490",
-            "https://www.pref.akita.lg.jp/pages/archive/36490",
-            "https://www.pref.akita.lg.jp/pages/archive/36490",
-            "https://www.pref.akita.lg.jp/pages/archive/36490",
-            "https://akita-chinage.jp/",
-            "https://www.pref.akita.lg.jp/pages/archive/36490",
-            "https://www.pref.akita.lg.jp/pages/archive/36490",
-            "https://www.pref.akita.lg.jp/pages/archive/36490",
-            "https://www.pref.akita.lg.jp/pages/archive/36490",
-            "https://www.pref.akita.lg.jp/pages/archive/36490",
+            "https://www.pref.akita.lg.jp/pages/archive/74198",   # ものづくり革新（省エネ型）
+            "https://www.pref.akita.lg.jp/pages/genre/34580",     # ものづくり革新（一般型）
+            "https://www.pref.akita.lg.jp/pages/archive/94135",   # 商業・サービス省エネ
+            "https://www.pref.akita.lg.jp/pages/archive/94185",   # デジタル化導入支援
+            "https://www.pref.akita.lg.jp/pages/archive/88411",   # 起業支援
+            "https://akita-chinage.jp/",                          # 賃上げ緊急支援
+            "https://www.pref.akita.lg.jp/pages/archive/71337",   # 副業・兼業人材活用
+            "https://www.pref.akita.lg.jp/pages/archive/90532",   # 酒造業緊急支援
+            "https://www.pref.akita.lg.jp/pages/archive/607",     # 企業立地促進
+            "https://www.pref.akita.lg.jp/pages/genre/11678",     # 中小企業設備近代化資金
+            "https://www.pref.akita.lg.jp/pages/genre/11682",     # UIターン就業支援
             # 秋田県観光文化スポーツ部
-            "https://www.pref.akita.lg.jp/pages/archive/36490",
-            "https://www.pref.akita.lg.jp/pages/archive/36490",
-            "https://www.pref.akita.lg.jp/pages/archive/36490",
-            "https://www.pref.akita.lg.jp/pages/archive/36490",
+            "https://www.pref.akita.lg.jp/pages/archive/87075",   # 宿泊事業者経営力強化（高付加価値化枠）
+            "https://www.pref.akita.lg.jp/pages/archive/87075",   # 宿泊事業者経営力強化（人材確保枠）
+            "https://www.pref.akita.lg.jp/pages/archive/87075",   # 宿泊事業者経営力強化（新規開業枠）
+            "https://www.pref.akita.lg.jp/pages/archive/88103",   # 台湾便活用交流促進
         ],
     }
     return pd.DataFrame(data)

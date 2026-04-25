@@ -530,7 +530,7 @@ def get_subsidies() -> pd.DataFrame:
             "2026-03-09","2026-04-01",
             "2026-03-09","2026-03-09",
             "2026-04-01","2026-01-05",
-            "2026-04-01","通年",
+            "2026-04-01","2026-04-09",
             "通年","通年",
             "通年",
             "2026-03-16","2026-03-16","2026-03-16","通年",
@@ -541,10 +541,10 @@ def get_subsidies() -> pd.DataFrame:
             "2026-04-30","2026-07-31",
             "2026-04-30","2026-04-30",
             "2026-06-12","2026-06-30",
-            "2027-01-31","通年",
+            "2027-01-31","2026-04-30",
             "通年","通年",
             "通年",
-            "通年","通年","通年","通年",
+            "2026-04-15","2026-04-15","2026-04-15","通年",
         ],
         "次回公募予定": [
             "2026年秋頃","2027年春頃","2026年12月頃","2027年春頃",
@@ -632,7 +632,7 @@ def get_subsidies() -> pd.DataFrame:
             "https://www.pref.akita.lg.jp/pages/archive/88411",   # 起業支援
             "https://akita-chinage.jp/",                          # 賃上げ緊急支援
             "https://www.pref.akita.lg.jp/pages/archive/71337",   # 副業・兼業人材活用
-            "https://www.pref.akita.lg.jp/pages/archive/90532",   # 酒造業緊急支援
+            "https://www.pref.akita.lg.jp/pages/archive/95516",   # 酒造業緊急支援
             "https://www.pref.akita.lg.jp/pages/archive/607",     # 企業立地促進
             "https://www.pref.akita.lg.jp/pages/genre/11678",     # 中小企業設備近代化資金
             "https://www.pref.akita.lg.jp/pages/genre/11682",     # UIターン就業支援

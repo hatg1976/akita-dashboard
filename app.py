@@ -1919,78 +1919,13 @@ def page_estat():
     st.caption("政府統計の総合窓口（e-Stat）から実データをリアルタイムに取得・分析する")
     st.markdown("---")
 
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "⚙️ API設定",
+    tab2, tab3, tab4 = st.tabs([
         "🔍 統計検索",
         "📥 データ取得",
         "📋 統計IDカタログ",
     ])
 
-    # ========== TAB1: API設定 ==========
-    with tab1:
-        st.subheader("APIキーの設定")
-
-        col_left, col_right = st.columns([3, 2])
-        with col_left:
-            current_key = st.session_state.get("estat_api_key", "")
-            key_input = st.text_input(
-                "e-Stat APIキー（appId）",
-                value=current_key,
-                type="password",
-                placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-                help="e-Stat マイページで発行したアプリケーションIDを入力してください",
-            )
-            col_save, col_clear = st.columns(2)
-            with col_save:
-                if st.button("💾 保存", use_container_width=True):
-                    st.session_state["estat_api_key"] = key_input.strip()
-                    st.success("APIキーをセッションに保存しました。")
-                    st.rerun()
-            with col_clear:
-                if st.button("🗑️ クリア", use_container_width=True):
-                    st.session_state["estat_api_key"] = ""
-                    st.rerun()
-
-        with col_right:
-            st.markdown("#### 接続状態")
-            if estat_api.is_api_key_set():
-                st.success("APIキー設定済み ✓")
-                if st.button("🔗 接続テスト"):
-                    with st.spinner("接続確認中..."):
-                        ok, msg = estat_api.test_connection()
-                    if ok:
-                        st.success(msg)
-                    else:
-                        st.error(msg)
-            else:
-                st.warning("APIキー未設定")
-
-        st.markdown("---")
-        st.subheader("APIキーの取得方法")
-        st.markdown("""
-        1. **e-Stat ユーザー登録**（無料）
-           - 右のサイトでアカウントを作成します
-        2. **アプリケーションID申請**
-           - マイページ → 「API機能（アプリケーションID発行）」→「発行」
-           - アプリケーション名: 任意（例: 秋田ダッシュボード）
-           - URL: `http://localhost` でも可
-        3. **発行されたIDをコピー**してこのページの入力欄に貼り付ける
-        """)
-        st.info(
-            "APIキーは `.env` ファイルに `ESTAT_API_KEY=your_key_here` と書いておくと、"
-            "アプリ再起動後も自動で読み込まれます。"
-        )
-
-        st.markdown("#### .env ファイルの設定例")
-        st.code("ESTAT_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", language="bash")
-
-        st.markdown("#### 利用制限")
-        st.dataframe(pd.DataFrame({
-            "項目": ["1日のリクエスト上限", "1リクエストの最大取得件数", "利用料金"],
-            "内容": ["10万リクエスト（無料）", "10万件", "無料"],
-        }), use_container_width=True, hide_index=True)
-
-    # ========== TAB2: 統計検索 ==========
+    # ========== TAB: 統計検索 ==========
     with tab2:
         st.subheader("統計表を検索する")
         st.markdown("キーワードで e-Stat の統計表データベースを検索し、統計表IDを調べることができます。")
@@ -2014,7 +1949,7 @@ def page_estat():
             if not keyword:
                 st.warning("キーワードを入力してください。")
             elif not estat_api.is_api_key_set():
-                st.error("APIキーが設定されていません。「API設定」タブで設定してください。")
+                st.error("APIキーが設定されていません。サーバーの環境変数 ESTAT_API_KEY を確認してください。")
             else:
                 field_code = estat_api.STATS_FIELD_OPTIONS[field_label]
                 with st.spinner(f"「{keyword}」を検索中..."):
@@ -2047,7 +1982,7 @@ def page_estat():
                     st.session_state["fetch_stats_id"] = selected_id
                     st.info(f"統計表ID `{selected_id}` を「データ取得」タブにセットしました。タブを切り替えてください。")
 
-    # ========== TAB3: データ取得 ==========
+    # ========== TAB: データ取得 ==========
     with tab3:
         st.subheader("統計データをリアルタイムに取得する")
 
@@ -2090,7 +2025,7 @@ def page_estat():
             if not stats_id:
                 st.warning("統計表IDを入力してください。")
             elif not estat_api.is_api_key_set():
-                st.error("APIキーが設定されていません。「API設定」タブで設定してください。")
+                st.error("APIキーが設定されていません。サーバーの環境変数 ESTAT_API_KEY を確認してください。")
             else:
                 with st.spinner(f"統計表 `{stats_id}` を取得中..."):
                     try:
@@ -2179,7 +2114,7 @@ def page_estat():
                             )
                             st.dataframe(df_cls, use_container_width=True, hide_index=True, height=200)
 
-    # ========== TAB4: 統計IDカタログ ==========
+    # ========== TAB: 統計IDカタログ ==========
     with tab4:
         st.subheader("よく使う統計表IDカタログ")
         st.markdown("このダッシュボードに関連する主要統計表の一覧です。統計表IDをコピーして「データ取得」タブで使用できます。")

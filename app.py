@@ -127,9 +127,9 @@ page = st.sidebar.selectbox(
      "🔎 業種別分析", "🗾 東北4県比較", "🏘️ 市町村比較",
      "🍱 食品製造業", "🏪 商店街",
      "📈 地域市場シェア分析",
-     "🏛️ 政策提言", "📚 事例研究DB", "💴 補助金カレンダー", "📝 施策メモ",
+     "🏛️ 政策提言", "📚 事例研究DB", "💴 補助金カレンダー",
      "🔌 e-Stat API連携",
-     "💹 決算書図解"],
+     "💹 決算書図解ツール"],
 )
 
 st.sidebar.markdown("---")
@@ -594,69 +594,6 @@ def page_industry_analysis():
 
 
 # ============================================================
-# 施策メモページ
-# ============================================================
-def page_notes():
-    st.title("📝 施策メモ・提言ノート")
-    st.markdown("---")
-    st.info("このページは診断士としての気づき・提言メモを記録する場所です。")
-
-    st.subheader("提言フレームワーク")
-    framework = {
-        "領域": ["人口・移住", "農業・食品", "製造業・DX", "観光・文化", "エネルギー"],
-        "現状課題": [
-            "年間2,500人の社会減、若年層流出",
-            "担い手不足、収益性低迷",
-            "生産性低下、後継者不足",
-            "インバウンド回復途上、PR不足",
-            "再エネポテンシャル未活用",
-        ],
-        "提言の方向性": [
-            "移住促進策の強化、UIターン支援",
-            "6次産業化、スマート農業導入",
-            "IoT・AI活用、M&A・事業承継支援",
-            "体験型観光、コンテンツ発信強化",
-            "洋上風力、水素社会への転換",
-        ],
-        "優先度": ["高", "高", "中", "中", "高"],
-    }
-    df_fw = pd.DataFrame(framework)
-    st.dataframe(df_fw, use_container_width=True)
-
-    st.markdown("---")
-    st.subheader("自由メモ")
-    memo = st.text_area(
-        "気づき・アイデアを記録してください",
-        height=200,
-        placeholder="例：秋田市内の空き店舗率が高い。移住者向けチャレンジショップ制度の活用事例を調査する...",
-    )
-    if st.button("メモを保存"):
-        with open("data/memo.txt", "a", encoding="utf-8") as f:
-            from datetime import datetime
-            f.write(f"\n\n--- {datetime.now().strftime('%Y-%m-%d %H:%M')} ---\n{memo}")
-        st.success("メモを保存しました（data/memo.txt）")
-
-    # Excel出力
-    st.markdown("---")
-    st.subheader("全データのExcelエクスポート")
-    if st.button("📊 Excelファイルを生成"):
-        buffer = io.BytesIO()
-        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-            get_sample_population().to_excel(writer, sheet_name="人口推移", index=False)
-            get_sample_migration().to_excel(writer, sheet_name="転入転出", index=False)
-            get_sample_industry().to_excel(writer, sheet_name="産業構造", index=False)
-            get_sample_economy().to_excel(writer, sheet_name="経済指標", index=False)
-            get_sample_municipal().to_excel(writer, sheet_name="市町村比較", index=False)
-            get_sample_renewable_energy().to_excel(writer, sheet_name="再生可能エネルギー", index=False)
-            df_fw.to_excel(writer, sheet_name="施策フレームワーク", index=False)
-        st.download_button(
-            "📥 Excelダウンロード",
-            buffer.getvalue(),
-            "akita_data_report.xlsx",
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-
-
 # ============================================================
 # 食品製造業ページ
 # ============================================================
@@ -1511,34 +1448,7 @@ def page_subsidies():
                 st.markdown(f"**窓口**\n\n{row['窓口']}")
                 st.markdown(f"**食品製造業** {row['食品製造業向け']} ／ **商店街** {row['商店街向け']}")
             st.info(f"💡 {row['メモ']}")
-
-    # ---- Gmail通知設定 ----
-    st.markdown("---")
-    st.subheader("📧 締切アラートメール設定")
-    st.markdown("補助金の締切が近づいたら自動でメールを受け取れます。")
-
-    with st.form("gmail_alert_form"):
-        alert_days = st.selectbox("何日前に通知しますか？", [60, 30, 14, 7], index=1)
-        target_subsidies = st.multiselect(
-            "通知したい補助金（未選択=全件）",
-            options=df["補助金名"].tolist(),
-            default=[],
-        )
-        submitted = st.form_submit_button("✉️ メール通知を設定する")
-        if submitted:
-            names = target_subsidies if target_subsidies else df["補助金名"].tolist()
-            body_lines = [f"【秋田県ダッシュボード】補助金申請期限アラート設定完了\n"]
-            body_lines.append(f"通知タイミング: 締切の {alert_days} 日前\n")
-            body_lines.append("対象補助金:\n")
-            for n in names:
-                row = df[df["補助金名"] == n].iloc[0]
-                body_lines.append(f"  ・{n}（締切: {row['申請締切']}）")
-            body_lines.append(f"\n毎月1日の自動チェック時に期限間近の補助金をメールでお知らせします。")
-            st.session_state["gmail_alert_config"] = {
-                "days": alert_days, "subsidies": names, "body": "\n".join(body_lines)
-            }
-            st.success(f"✅ 設定を保存しました。締切 {alert_days} 日前にメール通知します（次回の月次更新から有効）。")
-            st.code("\n".join(body_lines), language=None)
+            st.markdown(f"🔗 [公式サイトを開く]({row['URL']})")
 
     # Excel出力
     st.markdown("---")
@@ -2557,10 +2467,8 @@ elif page == "📚 事例研究DB":
     page_cases()
 elif page == "💴 補助金カレンダー":
     page_subsidies()
-elif page == "📝 施策メモ":
-    page_notes()
 elif page == "🔌 e-Stat API連携":
     page_estat()
-elif page == "💹 決算書図解":
+elif page == "💹 決算書図解ツール":
     from financial_diagram import page_financial
     page_financial()

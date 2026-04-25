@@ -613,6 +613,35 @@ def get_subsidies() -> pd.DataFrame:
             "新規開業宿泊施設の備品購入等。上限500万円",
             "秋田空港発台湾チャーター便を利用した交流活動を支援。3名以上のグループに5万円",
         ],
+        "URL": [
+            # 国の補助金
+            "https://portal.monodukuri-hojo.jp/",
+            "https://www.it-hojo.jp/",
+            "https://jizokukahojokin.info/",
+            "https://shoryokuka.smrj.go.jp/",
+            "https://jshojo-hojo.smrj.go.jp/",
+            "https://www.chusho.meti.go.jp/keiei/noushoukou/",
+            "https://www.meti.go.jp/policy/sme_chiiki/chiiki_mirai/",
+            "https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/koyou_roudou/koyou/kyufukin/jinzaikakuho.html",
+            "https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/koyou_roudou/part_haken/jigyounushi/career.html",
+            # 秋田県産業労働部
+            "https://www.pref.akita.lg.jp/pages/archive/36490",
+            "https://www.pref.akita.lg.jp/pages/archive/36490",
+            "https://www.pref.akita.lg.jp/pages/archive/36490",
+            "https://www.pref.akita.lg.jp/pages/archive/36490",
+            "https://www.pref.akita.lg.jp/pages/archive/36490",
+            "https://akita-chinage.jp/",
+            "https://www.pref.akita.lg.jp/pages/archive/36490",
+            "https://www.pref.akita.lg.jp/pages/archive/36490",
+            "https://www.pref.akita.lg.jp/pages/archive/36490",
+            "https://www.pref.akita.lg.jp/pages/archive/36490",
+            "https://www.pref.akita.lg.jp/pages/archive/36490",
+            # 秋田県観光文化スポーツ部
+            "https://www.pref.akita.lg.jp/pages/archive/36490",
+            "https://www.pref.akita.lg.jp/pages/archive/36490",
+            "https://www.pref.akita.lg.jp/pages/archive/36490",
+            "https://www.pref.akita.lg.jp/pages/archive/36490",
+        ],
     }
     return pd.DataFrame(data)
 

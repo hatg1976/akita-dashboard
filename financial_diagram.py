@@ -295,6 +295,7 @@ def page_financial():
                 col.markdown(f"**{year_labels[i]}**")
                 for key in ["流動資産", "固定資産", "繰延資産"]:
                     bs[key][i] = col.number_input(key, value=BS_DEF[key][i],
+                        min_value=0, max_value=9_999_999_999,
                         step=1000, key=f"bs_{key}_{i}", format="%d")
                 col.metric("資産合計",
                     f"{sum(bs[k][i] for k in ['流動資産','固定資産','繰延資産']):,.0f}")
@@ -305,6 +306,7 @@ def page_financial():
                 col.markdown(f"**{year_labels[i]}**")
                 for key in ["流動負債", "固定負債", "純資産"]:
                     bs[key][i] = col.number_input(key, value=BS_DEF[key][i],
+                        min_value=0, max_value=9_999_999_999,
                         step=1000, key=f"bs_{key}_{i}", format="%d")
                 col.metric("負債・純資産合計",
                     f"{sum(bs[k][i] for k in ['流動負債','固定負債','純資産']):,.0f}")
@@ -327,6 +329,7 @@ def page_financial():
                 col.markdown(f"**{year_labels[i]}**")
                 for key, label in PL_FIELDS:
                     pl[key][i] = col.number_input(label, value=PL_DEF[key][i],
+                        min_value=0, max_value=9_999_999_999,
                         step=1000, key=f"pl_{key}_{i}", format="%d")
 
     st.markdown(f"## 財務分析ブロック図　（単位：{unit_label}）")

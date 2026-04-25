@@ -253,7 +253,7 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
 
 def page_financial():
     st.title("📊 決算書図解ツール")
-    st.markdown("BS・P/Lデータを入力するとブロック図で財務構造を可視化します")
+    st.markdown("BS・P/Lデータを入力すると図で財務構造を可視化します。決算書の図解に関する詳細説明は[こちらをご覧ください](https://note.com/management_step/n/n7185c002ac3d)。")
     st.markdown("---")
 
     with st.expander("📝 基本設定・データ入力", expanded=True):

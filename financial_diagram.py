@@ -136,80 +136,84 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
                              bordercolor="#aaa", borderwidth=0.5, borderpad=2))
 
     # ── BS 描画 ─────────────────────────────────────────────────────
-    rect(BS_A, ca_bot, ca_top, "white", "#333")
+    BS  = "#FAF3E0"   # 薄ベージュ（BS共通）
+    PL  = "#E8F4FD"   # 薄水色（P/L共通）
+    BDR = "#888"      # 枠線色
+
+    rect(BS_A, ca_bot, ca_top, BS, BDR)
     box( BS_A, ca_bot, ca_top, f"流動資産<br>{curr_a:,.0f}", 11, "#222", True)
-    rect(BS_A, fa_bot, fa_top, "white", "#333")
+    rect(BS_A, fa_bot, fa_top, BS, BDR)
     box( BS_A, fa_bot, fa_top, f"固定資産<br>{fix_a:,.0f}",  11, "#222", True)
     if def_a > 0:
-        rect(BS_A, da_bot, da_top, "white", "#333")
+        rect(BS_A, da_bot, da_top, BS, BDR)
         box( BS_A, da_bot, da_top, f"繰延資産<br>{def_a:,.0f}", 10, "#222")
 
-    rect(BS_L, cl_bot, cl_top, "white", "#333")
+    rect(BS_L, cl_bot, cl_top, BS, BDR)
     box( BS_L, cl_bot, cl_top, f"流動負債<br>{curr_l:,.0f}", 11, "#222", True)
-    rect(BS_L, fl_bot, fl_top, "white", "#333")
+    rect(BS_L, fl_bot, fl_top, BS, BDR)
     box( BS_L, fl_bot, fl_top, f"固定負債<br>{fix_l:,.0f}",  11, "#222", True)
     if eq_negative:
-        rect(BS_A, eq_bot, eq_top, "white", "#333")
+        rect(BS_A, eq_bot, eq_top, BS, BDR)
         box( BS_A, eq_bot, eq_top, f"▲純資産<br>{eqy:,.0f}", 11, "#222", True)
     else:
-        rect(BS_L, eq_bot, eq_top, "white", "#333")
+        rect(BS_L, eq_bot, eq_top, BS, BDR)
         box( BS_L, eq_bot, eq_top, f"純資産<br>{eqy:,.0f}",  11, "#222", True)
 
     # ── REV 列（売上高）─────────────────────────────────────────
-    rect(REV, 0, rev, "white", "#333")
+    rect(REV, 0, rev, PL, BDR)
     box( REV, 0, rev, f"売上高<br>{rev:,.0f}", 12, "#222", True)
-    hline(REV, rev, "#333", 1.5)
+    hline(REV, rev, BDR, 1.5)
 
     # ── MAIN 列（変動費 / 粗利益）────────────────────────────────
-    rect(MAIN, var_bot, var_top, "white", "#333")
+    rect(MAIN, var_bot, var_top, PL, BDR)
     box( MAIN, var_bot, var_top, f"変動費<br>{var:,.0f}", 12, "#222", True)
-    rect(MAIN, gro_bot, gro_top, "white", "#333")
+    rect(MAIN, gro_bot, gro_top, PL, BDR)
     box( MAIN, gro_bot, gro_top, f"粗利益<br>{gross:,.0f}", 12, "#222", True)
-    hline(MAIN, gross, "#333", 1.2)
-    hline(MAIN, rev,   "#333", 1.5)
+    hline(MAIN, gross, BDR, 1.2)
+    hline(MAIN, rev,   BDR, 1.5)
 
     # ── FIX 列（fix<=gross→0〜fix、fix>gross→(gross-fix)〜gross）──
     fix_top = min(fix, gross)
     fix_bot = -overflow
-    rect(FIX, fix_bot, fix_top, "white", "#333")
+    rect(FIX, fix_bot, fix_top, PL, BDR)
     box( FIX, fix_bot, fix_top, f"固定費<br>{fix:,.0f}", 11, "#222", True)
-    hline(FIX, 0, "#666", 0.8)
+    hline(FIX, 0, BDR, 0.8)
 
     # ── SUB 列（人件費→減価償却費→その他固定費）──────────────────
     if jinken > 0 and j_top > j_bot:
-        rect(SUB, j_bot,  j_top,  "white", "#333")
+        rect(SUB, j_bot,  j_top,  PL, BDR)
         box( SUB, j_bot,  j_top,  f"人件費 {jinken:,.0f}", 10, "#222", oneline=True)
 
     if deprec > 0 and dp_top > dp_bot:
-        rect(SUB, dp_bot, dp_top, "white", "#333")
+        rect(SUB, dp_bot, dp_top, PL, BDR)
         box( SUB, dp_bot, dp_top, f"減価償却費 {deprec:,.0f}", 10, "#222", oneline=True)
 
     if other_fix > 0 and ot_top > ot_bot:
-        rect(SUB, ot_bot, ot_top, "white", "#333")
+        rect(SUB, ot_bot, ot_top, PL, BDR)
         box( SUB, ot_bot, ot_top, f"その他固定費 {other_fix:,.0f}", 10, "#222", oneline=True)
 
-    hline(SUB, fix_top_coord, "#333", 1.0)
-    hline(SUB, 0,             "#666", 0.8)
+    hline(SUB, fix_top_coord, BDR, 1.0)
+    hline(SUB, 0,             BDR, 0.8)
 
     # ── RT 列（経常利益/損失）────────────────────────────────────
     if ord_p > 0:
-        rect(RT, 0, ord_p, "white", "#333")
+        rect(RT, 0, ord_p, PL, BDR)
         box( RT, 0, ord_p, f"経常利益 {ord_p:,.0f}", 10, "#222", oneline=True)
     elif ord_p < 0:
-        rect(RT, ord_p, 0, "white", "#333")
+        rect(RT, ord_p, 0, PL, BDR)
         box( RT, ord_p, 0, f"経常損失 {ord_p:,.0f}", 10, "#222", oneline=True)
 
-    hline(RT, 0, "#666", 0.8)
+    hline(RT, 0, BDR, 0.8)
 
     # ── CF 列（当期純利益/損失）──────────────────────────────────
     if net > 0:
-        rect(CF, 0, net, "white", "#333")
+        rect(CF, 0, net, PL, BDR)
         box( CF, 0, net, f"当期純利益 {net:,.0f}", 10, "#222", oneline=True)
     elif net < 0:
-        rect(CF, net, 0, "white", "#333")
+        rect(CF, net, 0, PL, BDR)
         box( CF, net, 0, f"当期純損失 {net:,.0f}", 10, "#222", oneline=True)
 
-    hline(CF, 0, "#666", 0.8)
+    hline(CF, 0, BDR, 0.8)
 
     # ── 指標アノテーション（すべて同じ高さ・上部に配置）─────────────
     ann_y = y_max * 0.97

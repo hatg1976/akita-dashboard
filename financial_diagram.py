@@ -80,7 +80,7 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
     # 特別利益は y=0 の一番下に表示
 
     # Y 軸範囲
-    y_neg = min(0.0, ord_p if ord_p < 0 else 0, net if net < 0 else 0,
+    y_neg = min(0.0, -overflow, ord_p if ord_p < 0 else 0, net if net < 0 else 0,
                 eqy if eqy < 0 else 0)
     y_pos = max(rev + max(non_rev, 0.0), total_a)
     y_min = y_neg * 1.35 if y_neg < 0 else -rev * 0.05
@@ -169,10 +169,11 @@ def _draw_block_diagram(bs, pl, year_label, unit_label):
     hline(MAIN, gross, "#333", 1.2)
     hline(MAIN, rev,   "#333", 1.5)
 
-    # ── FIX 列（fix>gross→0〜gross、fix<=gross→0〜fix）────────────
-    fix_top = min(fix, gross)   # 上端：粗利益を超えない
-    rect(FIX, 0, fix_top, "#CD853F", "#8B5E3C")
-    box( FIX, 0, fix_top, f"固定費<br>{fix:,.0f}", 11, "white", True)
+    # ── FIX 列（fix<=gross→0〜fix、fix>gross→(gross-fix)〜gross）──
+    fix_top = min(fix, gross)   # 上端
+    fix_bot = -overflow          # fix<=gross なら0、fix>gross なら負値
+    rect(FIX, fix_bot, fix_top, "#CD853F", "#8B5E3C")
+    box( FIX, fix_bot, fix_top, f"固定費<br>{fix:,.0f}", 11, "white", True)
     hline(FIX, 0, "#666", 0.8)
 
     # ── SUB 列（人件費→減価償却費→その他固定費→営業外費用）──────

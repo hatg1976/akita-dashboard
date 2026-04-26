@@ -42,6 +42,7 @@ from collector import (
     TOHOKU_COLORS,
     get_industry_hierarchy,
     get_industry_detail,
+    get_industry_extended_detail,
 )
 
 @st.cache_data(ttl=86400)
@@ -124,11 +125,11 @@ st.sidebar.markdown("---")
 page = st.sidebar.selectbox(
     "表示するデータ",
     ["📊 総合概要", "👥 人口動態", "🏭 産業構造", "💰 経済指標",
-     "🔎 業種別分析", "🗾 東北4県比較", "🏘️ 市町村比較",
+     "🔎 業種別分析", "📊 業種別詳細分析",
+     "🗾 東北4県比較", "🏘️ 市町村比較",
      "📈 地域市場シェア分析",
      "💹 決算書図解ツール",
      "🏛️ 政策提言", "📚 事例研究DB", "💴 補助金カレンダー",
-     "🍱 食品製造業", "🏪 商店街",
      "🔌 e-Stat API連携"],
 )
 
@@ -597,8 +598,9 @@ def page_industry_analysis():
 # ============================================================
 # 食品製造業ページ
 # ============================================================
-def page_food():
-    st.title("🍱 食品製造業 詳細分析")
+def page_food(show_title=True):
+    if show_title:
+        st.title("🍱 食品製造業 詳細分析")
     st.caption("秋田の強みを活かした食品産業の現状と提言")
     st.markdown("---")
 
@@ -721,8 +723,9 @@ def page_food():
 # ============================================================
 # 商店街ページ
 # ============================================================
-def page_shotengai():
-    st.title("🏪 商店街 詳細分析")
+def page_shotengai(show_title=True):
+    if show_title:
+        st.title("🏪 商店街 詳細分析")
     st.caption("秋田県内商店街の現状・課題と再生施策の提言")
     st.markdown("---")
 
@@ -873,6 +876,120 @@ def page_shotengai():
 - デジタルノマド向けWi-Fi・電源整備
 - 秋田の「暮らしを体験する」観光の核に
         """)
+
+
+# ============================================================
+# 業種別詳細分析ページ
+# ============================================================
+def page_industry_detail():
+    st.title("📊 業種別詳細分析")
+    st.caption("業種を選択すると現状・課題・診断士提言を詳しく確認できます")
+    st.markdown("---")
+
+    INDUSTRIES = [
+        "🍱 食品製造業",
+        "🏪 商店街",
+        "🔨 職別工事業・設備工事業",
+        "🚌 道路旅客運送業",
+        "🚚 道路貨物運送業",
+        "🏨 宿泊業",
+        "🍽️ 飲食サービス業",
+        "🥡 持ち帰り・配達飲食サービス業",
+        "✈️ 旅行業",
+        "💐 冠婚葬祭業",
+        "🤝 事業協同組合",
+        "♻️ 廃棄物処理業",
+        "🔧 自動車整備業",
+    ]
+
+    selected = st.selectbox("業種を選択", INDUSTRIES, label_visibility="collapsed")
+    industry_key = selected.split(" ", 1)[1]  # アイコンを除いた業種名
+    st.markdown("---")
+
+    if industry_key == "食品製造業":
+        page_food(show_title=False)
+        return
+    if industry_key == "商店街":
+        page_shotengai(show_title=False)
+        return
+
+    detail = get_industry_extended_detail(industry_key)
+    if not detail:
+        st.warning("データがまだ登録されていません。")
+        return
+
+    # KPIカード
+    yoy = detail["前年比_pct"]
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("事業所数",   f"{detail['事業所数']:,}社")
+    col2.metric("従業員数",   f"{detail['従業員数']:,}人")
+    col3.metric("年間売上額", f"{detail['売上額_億円']:,}億円",
+                delta=f"{yoy:+.1f}%（前年比）",
+                delta_color="normal" if yoy >= 0 else "inverse")
+    col4.metric("大分類",     detail["大分類"])
+
+    # グラフ 2列
+    col_l, col_r = st.columns(2)
+    with col_l:
+        trend = detail["trend"]
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            x=trend["年"], y=trend["売上"],
+            name="売上額（億円）", marker_color="#1f4e79", yaxis="y",
+        ))
+        fig.add_trace(go.Scatter(
+            x=trend["年"], y=trend["従業員"],
+            name="従業員（百人）", line=dict(color="#d62728", width=2),
+            mode="lines+markers", yaxis="y2",
+        ))
+        fig.update_layout(
+            title=f"{industry_key} — 5年間の推移", height=340,
+            yaxis=dict(title="売上額（億円）"),
+            yaxis2=dict(title="従業員（百人）", overlaying="y", side="right"),
+            legend=dict(orientation="h", y=-0.2),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    with col_r:
+        tohoku = detail["tohoku"]
+        prefs = list(tohoku.keys())
+        vals  = list(tohoku.values())
+        colors = ["#d62728" if p == "秋田県" else "#aec7e8" for p in prefs]
+        fig = go.Figure(go.Bar(
+            x=prefs, y=vals, marker_color=colors,
+            text=vals, texttemplate="%{text:,}億円", textposition="outside",
+        ))
+        fig.update_layout(title="東北4県比較（売上額 億円）", height=340, yaxis_title="億円")
+        st.plotly_chart(fig, use_container_width=True)
+
+    # 課題・強み
+    st.markdown("---")
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.markdown("#### ⚠️ 主な課題")
+        for item in detail.get("課題", []):
+            st.error(f"• {item}")
+    with col_b:
+        st.markdown("#### ✅ 強み・機会")
+        for item in detail.get("強み", []):
+            st.success(f"• {item}")
+
+    # 診断士提言（3項目）
+    st.markdown("---")
+    st.markdown("#### 💡 診断士としての提言")
+    提言s = detail.get("提言_詳細", [])
+    if 提言s:
+        cols = st.columns(len(提言s))
+        for col, (title, body) in zip(cols, 提言s):
+            with col:
+                st.info(f"**{title}**\n\n{body}")
+
+    # 関連補助金
+    subsidies = detail.get("関連補助金", [])
+    if subsidies:
+        st.markdown("**関連補助金・支援制度**")
+        for s in subsidies:
+            st.markdown(f"- {s}")
 
 
 # ============================================================
@@ -2556,12 +2673,10 @@ elif page == "💰 経済指標":
     page_economy()
 elif page == "🏘️ 市町村比較":
     page_municipal()
-elif page == "🍱 食品製造業":
-    page_food()
-elif page == "🏪 商店街":
-    page_shotengai()
 elif page == "🔎 業種別分析":
     page_industry_analysis()
+elif page == "📊 業種別詳細分析":
+    page_industry_detail()
 elif page == "🗾 東北4県比較":
     page_tohoku()
 elif page == "📈 地域市場シェア分析":

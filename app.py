@@ -129,7 +129,7 @@ page = st.sidebar.selectbox(
      "🗾 東北4県比較", "🏘️ 市町村比較",
      "📈 地域市場シェア分析",
      "💹 決算書図解ツール",
-     "🏛️ 政策提言", "📚 事例研究DB", "💴 補助金カレンダー",
+     "🏛️ 政策提言", "💴 補助金カレンダー",
      "🔌 e-Stat API連携"],
 )
 
@@ -906,9 +906,35 @@ def page_industry_detail():
 
     if industry_key == "食品製造業":
         page_food(show_title=False)
+        detail_for_cases = get_industry_extended_detail(industry_key)
+        cases = detail_for_cases.get("事例", [])
+        if cases:
+            st.markdown("---")
+            st.markdown("#### 📖 参考事例（他地域・中小企業白書）")
+            for case in cases:
+                with st.expander(f"**{case['タイトル']}** ― {case['地域']}"):
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.markdown(f"**取り組み:** {case['取り組み']}")
+                        st.markdown(f"**成果:** {case['成果']}")
+                    with col2:
+                        st.info(f"**秋田への示唆**\n\n{case['示唆']}")
         return
     if industry_key == "商店街":
         page_shotengai(show_title=False)
+        detail_for_cases = get_industry_extended_detail(industry_key)
+        cases = detail_for_cases.get("事例", [])
+        if cases:
+            st.markdown("---")
+            st.markdown("#### 📖 参考事例（他地域・中小企業白書）")
+            for case in cases:
+                with st.expander(f"**{case['タイトル']}** ― {case['地域']}"):
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.markdown(f"**取り組み:** {case['取り組み']}")
+                        st.markdown(f"**成果:** {case['成果']}")
+                    with col2:
+                        st.info(f"**秋田への示唆**\n\n{case['示唆']}")
         return
 
     detail = get_industry_extended_detail(industry_key)
@@ -988,6 +1014,21 @@ def page_industry_detail():
         st.markdown("**関連補助金・支援制度**")
         for s in subsidies:
             st.markdown(f"- {s}")
+
+    # 事例セクション（共通）
+    detail_for_cases = get_industry_extended_detail(industry_key)
+    cases = detail_for_cases.get("事例", [])
+    if cases:
+        st.markdown("---")
+        st.markdown("#### 📖 参考事例（他地域・中小企業白書）")
+        for case in cases:
+            with st.expander(f"**{case['タイトル']}** ― {case['地域']}"):
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.markdown(f"**取り組み:** {case['取り組み']}")
+                    st.markdown(f"**成果:** {case['成果']}")
+                with col2:
+                    st.info(f"**秋田への示唆**\n\n{case['示唆']}")
 
 
 # ============================================================
@@ -2681,8 +2722,6 @@ elif page == "📈 地域市場シェア分析":
     page_market_share()
 elif page == "🏛️ 政策提言":
     page_policy()
-elif page == "📚 事例研究DB":
-    page_cases()
 elif page == "💴 補助金カレンダー":
     page_subsidies()
 elif page == "🔌 e-Stat API連携":

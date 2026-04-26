@@ -739,140 +739,18 @@ def fetch_census_productivity() -> pd.DataFrame:
 
 def fetch_census_size_distribution(industry: str) -> pd.DataFrame:
     """
-    令和3年経済センサス-活動調査から指定業種の従業者規模別事業所数を取得する。
-    APIキー未設定またはAPI呼び出し失敗時はサンプルデータを返す。
+    業種別の従業者規模別事業所数（令和3年経済センサス-活動調査 推計）。
+    e-Stat APIの公開テーブルは大分類レベルのみのため、中分類ごとの推計サンプルデータを使用。
     Args: industry: 業種名（中分類）
-    Returns: DataFrame with columns [規模区分, 事業所数]
+    Returns: DataFrame with columns [規模区分, 事業所数]。データなしの場合は空DataFrame。
     """
-    # 中分類名 → 大分類サンプルデータキーへのマッピングを適用（後方互換性）
     key = _INDUSTRY_TO_SAMPLE_KEY.get(industry, industry)
-
-    def _fallback() -> pd.DataFrame:
-        if key in _SIZE_DISTRIBUTION_SAMPLE:
-            return pd.DataFrame(_SIZE_DISTRIBUTION_SAMPLE[key])
-        for sample_key in _SIZE_DISTRIBUTION_SAMPLE:
-            if sample_key in industry or industry in sample_key:
-                return pd.DataFrame(_SIZE_DISTRIBUTION_SAMPLE[sample_key])
-        return pd.DataFrame(_SIZE_DISTRIBUTION_DEFAULT)
-
-    if not is_api_key_set():
-        return _fallback()
-
-    # 標準規模区分ラベル（e-Stat の表示名 → 統一ラベル）
-    _SIZE_LABEL_MAP = {
-        "1～4人": "1-4人",
-        "1～4": "1-4人",
-        "5～9人": "5-9人",
-        "5～9": "5-9人",
-        "10～29人": "10-29人",
-        "10～29": "10-29人",
-        "30～49人": "30-49人",
-        "30～49": "30-49人",
-        "50～99人": "50-99人",
-        "50～99": "50-99人",
-        "100～299人": "100-299人",
-        "100～299": "100-299人",
-        "300人以上": "300人以上",
-        "300人～": "300人以上",
-    }
-    _SIZE_ORDER = ["1-4人", "5-9人", "10-29人", "30-49人", "50-99人", "100-299人", "300人以上"]
-
-    # 大分類名（APIの業種名）へのマッピング
-    _SAMPLE_KEY_TO_DAIBUNSHU = {
-        "建設業": "建設業",
-        "製造業": "製造業",
-        "卸売業": "卸売業・小売業",
-        "小売業": "卸売業・小売業",
-        "医療・福祉": "医療・福祉",
-        "飲食サービス業": "宿泊業・飲食サービス業",
-        "宿泊業": "宿泊業・飲食サービス業",
-        "運輸業・郵便業": "運輸業・郵便業",
-        "生活関連サービス業": "生活関連サービス業・娯楽業",
-        "サービス業": "サービス業(他に分類されないもの)",
-    }
-    target_daibunshu = _SAMPLE_KEY_TO_DAIBUNSHU.get(key, key)
-
-    try:
-        df, meta = fetch_stats_data("0004005642", area_code="05000", limit=10000)
-
-        if df.empty:
-            return _fallback()
-
-        # 業種次元と規模区分次元を特定
-        cat01_meta = meta.get("cat01", {})
-        # 規模区分は cat で "1～4" を含む次元を探す
-        size_dim_key = None
-        size_dim_meta = {}
-        for dim_key, dim_map in meta.items():
-            if dim_key == "cat01":
-                continue
-            for code, name in dim_map.items():
-                if "1～4" in name or "1-4" in name:
-                    size_dim_key = dim_key
-                    size_dim_meta = dim_map
-                    break
-            if size_dim_key:
-                break
-
-        if size_dim_key is None or not cat01_meta:
-            return _fallback()
-
-        # 業種コードを特定（大分類名で部分一致）
-        ind_code_match = None
-        for code, name in cat01_meta.items():
-            if code in ("00", "000") or "合計" in name or "総数" in name:
-                continue
-            # 完全一致優先、次に部分一致
-            if name == target_daibunshu:
-                ind_code_match = code
-                break
-            if target_daibunshu in name or name in target_daibunshu:
-                ind_code_match = code
-
-        if ind_code_match is None:
-            return _fallback()
-
-        # 対象業種の行に絞り込む
-        df_ind = df[df["cat01"] == ind_code_match] if "cat01" in df.columns else df
-
-        # 規模区分ごとに事業所数を集計
-        size_rows = []
-        for size_code, size_name in size_dim_meta.items():
-            # 「総数」行はスキップ
-            if "総数" in size_name or "合計" in size_name:
-                continue
-            std_label = _SIZE_LABEL_MAP.get(size_name)
-            if std_label is None:
-                # ラベルが「10人」のような略称の場合も部分一致で検索
-                for key_pat, lbl in _SIZE_LABEL_MAP.items():
-                    if key_pat.rstrip("人") in size_name:
-                        std_label = lbl
-                        break
-            if std_label is None:
-                continue
-
-            rows_size = df_ind[df_ind[size_dim_key] == size_code] if size_dim_key in df_ind.columns else pd.DataFrame()
-            if rows_size.empty:
-                continue
-            count_val = rows_size["value"].iloc[0]
-            if pd.isna(count_val):
-                continue
-            size_rows.append({"規模区分": std_label, "事業所数": int(count_val)})
-
-        if not size_rows:
-            return _fallback()
-
-        result_df = pd.DataFrame(size_rows)
-        # 標準順序でソート
-        result_df["_order"] = result_df["規模区分"].apply(
-            lambda x: _SIZE_ORDER.index(x) if x in _SIZE_ORDER else 99
-        )
-        result_df = result_df.sort_values("_order").drop(columns=["_order"]).reset_index(drop=True)
-
-        return result_df
-
-    except Exception:
-        return _fallback()
+    if key in _SIZE_DISTRIBUTION_SAMPLE:
+        return pd.DataFrame(_SIZE_DISTRIBUTION_SAMPLE[key])
+    for sample_key in _SIZE_DISTRIBUTION_SAMPLE:
+        if sample_key in industry or industry in sample_key:
+            return pd.DataFrame(_SIZE_DISTRIBUTION_SAMPLE[sample_key])
+    return pd.DataFrame()
 
 
 def has_size_distribution_data(industry: str) -> bool:

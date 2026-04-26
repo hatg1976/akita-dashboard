@@ -125,7 +125,7 @@ st.sidebar.markdown("---")
 page = st.sidebar.selectbox(
     "表示するデータ",
     ["📊 総合概要", "👥 人口動態", "🏭 産業構造", "💰 経済指標",
-     "🔎 業種別分析", "📋 特定業種支援ガイド",
+     "🔎 業種別分析", "📋 特定業種支援ガイド", "📊 業種別生産性分析",
      "🗾 東北4県比較", "🏘️ 市町村比較",
      "📈 地域市場シェア分析",
      "💹 決算書図解ツール",
@@ -2700,6 +2700,152 @@ def page_market_share():
     )
 
 
+# ============================================================
+# 業種別生産性分析ページ
+# ============================================================
+def page_industry_census():
+    st.title("📊 業種別生産性分析")
+    st.caption("令和3年経済センサス-活動調査に基づく秋田県の業種別労働生産性と事業所規模分布")
+    st.markdown("---")
+
+    if not estat_api.is_api_key_set():
+        st.info(
+            "e-Stat APIキーを設定するとリアルタイムデータを取得できます。"
+            "「🔌 e-Stat API連携」ページでキーを入力してください。現在はサンプルデータを表示しています。"
+        )
+
+    tab1, tab2 = st.tabs(["💡 一人当たり労働生産性", "📊 従業者規模別分布"])
+
+    with tab1:
+        df_prod = estat_api.fetch_census_productivity()
+
+        if df_prod.empty:
+            st.warning("データを取得できませんでした。")
+        else:
+            df_sorted = df_prod.sort_values("一人当たり生産性_万円", ascending=True).reset_index(drop=True)
+
+            avg_productivity = int(df_sorted["一人当たり生産性_万円"].mean())
+
+            fig = go.Figure()
+            fig.add_trace(go.Bar(
+                x=df_sorted["一人当たり生産性_万円"],
+                y=df_sorted["業種"],
+                orientation="h",
+                marker_color="#1f4e79",
+                text=df_sorted["一人当たり生産性_万円"].apply(lambda v: f"{v:,}万円"),
+                textposition="outside",
+            ))
+            fig.add_vline(
+                x=avg_productivity,
+                line_dash="dash",
+                line_color="#d62728",
+                annotation_text=f"秋田平均: {avg_productivity:,}万円",
+                annotation_position="top right",
+                annotation_font_color="#d62728",
+            )
+            fig.update_layout(
+                height=450,
+                xaxis_title="一人当たり労働生産性（万円/人）",
+                yaxis_title="",
+                margin=dict(l=10, r=80, t=30, b=40),
+                plot_bgcolor="white",
+                xaxis=dict(gridcolor="#e0e0e0"),
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            st.caption(
+                "**指標の定義**: 一人当たり労働生産性 ＝ 付加価値額 ÷ 従業員数（単位: 万円/人）。"
+                "付加価値額は売上高から外部購入費（原材料・仕入費等）を差し引いた値。"
+                "**出典**: 令和3年経済センサス-活動調査（経済産業省）"
+            )
+
+            st.markdown("---")
+            st.subheader("業種別データ一覧")
+            df_display = df_sorted[["業種", "一人当たり生産性_万円", "付加価値額_百万円", "従業員数"]].sort_values(
+                "一人当たり生産性_万円", ascending=False
+            ).reset_index(drop=True)
+            df_display.index = df_display.index + 1
+            st.dataframe(
+                df_display.rename(columns={
+                    "一人当たり生産性_万円": "労働生産性（万円/人）",
+                    "付加価値額_百万円": "付加価値額（百万円）",
+                }),
+                use_container_width=True,
+            )
+
+    with tab2:
+        hierarchy = get_industry_hierarchy()
+        all_categories = []
+        for major_info in hierarchy.values():
+            all_categories.extend(major_info["categories"])
+
+        selected_industry = st.selectbox(
+            "業種を選択（中分類）",
+            all_categories,
+            key="census_size_industry",
+        )
+
+        df_size = estat_api.fetch_census_size_distribution(selected_industry)
+
+        if df_size.empty:
+            st.warning("データを取得できませんでした。")
+        else:
+            total_establishments = df_size["事業所数"].sum()
+            df_size["累積割合_%"] = (df_size["事業所数"].cumsum() / total_establishments * 100).round(1)
+
+            fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+            fig.add_trace(
+                go.Bar(
+                    x=df_size["規模区分"],
+                    y=df_size["事業所数"],
+                    name="事業所数",
+                    marker_color="#1f4e79",
+                    text=df_size["事業所数"],
+                    textposition="outside",
+                ),
+                secondary_y=False,
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=df_size["規模区分"],
+                    y=df_size["累積割合_%"],
+                    name="累積割合（%）",
+                    mode="lines+markers",
+                    line=dict(color="#d62728", width=2),
+                    marker=dict(size=7),
+                ),
+                secondary_y=True,
+            )
+            fig.update_layout(
+                height=420,
+                title_text=f"{selected_industry} — 従業者規模別事業所数",
+                plot_bgcolor="white",
+                xaxis=dict(title="従業者規模", gridcolor="#e0e0e0"),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                margin=dict(t=60, b=40),
+            )
+            fig.update_yaxes(title_text="事業所数（所）", secondary_y=False, gridcolor="#e0e0e0")
+            fig.update_yaxes(title_text="累積割合（%）", secondary_y=True, range=[0, 105])
+
+            st.plotly_chart(fig, use_container_width=True)
+            st.caption(
+                f"**{selected_industry}** の従業者規模別事業所分布。"
+                f"合計 {total_establishments:,} 事業所。"
+                "棒グラフ（左軸）は各規模区分の事業所数、折れ線グラフ（右軸）は累積割合を示す。"
+                "**出典**: 令和3年経済センサス-活動調査（経済産業省）"
+            )
+
+            col1, col2 = st.columns(2)
+            with col1:
+                small_count = df_size[df_size["規模区分"].isin(["1-4人", "5-9人", "10-19人"])]["事業所数"].sum()
+                small_pct = round(small_count / total_establishments * 100, 1) if total_establishments > 0 else 0
+                st.metric("小規模事業所（1-19人）", f"{small_count:,}所", f"全体の{small_pct}%")
+            with col2:
+                large_count = df_size[df_size["規模区分"].isin(["100-299人", "300人以上"])]["事業所数"].sum()
+                large_pct = round(large_count / total_establishments * 100, 1) if total_establishments > 0 else 0
+                st.metric("大規模事業所（100人以上）", f"{large_count:,}所", f"全体の{large_pct}%")
+
+
 # ルーティング
 # ============================================================
 if page == "📊 総合概要":
@@ -2716,6 +2862,8 @@ elif page == "🔎 業種別分析":
     page_industry_analysis()
 elif page == "📋 特定業種支援ガイド":
     page_industry_detail()
+elif page == "📊 業種別生産性分析":
+    page_industry_census()
 elif page == "🗾 東北4県比較":
     page_tohoku()
 elif page == "📈 地域市場シェア分析":

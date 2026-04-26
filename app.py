@@ -2769,15 +2769,9 @@ def page_industry_census():
             )
 
     with tab2:
-        hierarchy = get_industry_hierarchy()
-        all_categories = []
-        for major_info in hierarchy.values():
-            all_categories.extend(major_info["categories"])
-
-        available = [c for c in all_categories if estat_api.has_size_distribution_data(c)]
         selected_industry = st.selectbox(
-            "業種を選択（中分類）",
-            available,
+            "業種を選択（大分類）",
+            estat_api.CENSUS_DAIBUNSHU_LIST,
             key="census_size_industry",
         )
 

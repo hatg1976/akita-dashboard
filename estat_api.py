@@ -737,28 +737,116 @@ def fetch_census_productivity() -> pd.DataFrame:
         return pd.DataFrame(_PRODUCTIVITY_SAMPLE)
 
 
+# 従業者規模別分布で使用する大分類リスト（表示順）
+CENSUS_DAIBUNSHU_LIST = [
+    "農林漁業",
+    "鉱業・採石業・砂利採取業",
+    "建設業",
+    "製造業",
+    "電気・ガス・熱供給・水道業",
+    "情報通信業",
+    "運輸業・郵便業",
+    "卸売業・小売業",
+    "金融業・保険業",
+    "不動産業・物品賃貸業",
+    "学術研究・専門・技術サービス業",
+    "宿泊業・飲食サービス業",
+    "生活関連サービス業・娯楽業",
+    "教育・学習支援業",
+    "医療・福祉",
+    "複合サービス事業",
+    "サービス業（他に分類されないもの）",
+]
+
+_SIZE_LABEL_MAP = {
+    "1～4人": "1-4人", "1～4": "1-4人",
+    "5～9人": "5-9人", "5～9": "5-9人",
+    "10～29人": "10-29人", "10～29": "10-29人",
+    "30～49人": "30-49人", "30～49": "30-49人",
+    "50～99人": "50-99人", "50～99": "50-99人",
+    "100～299人": "100-299人", "100～299": "100-299人",
+    "300人以上": "300人以上", "300人～": "300人以上",
+}
+_SIZE_ORDER = ["1-4人", "5-9人", "10-29人", "30-49人", "50-99人", "100-299人", "300人以上"]
+
+
 def fetch_census_size_distribution(industry: str) -> pd.DataFrame:
     """
-    業種別の従業者規模別事業所数（令和3年経済センサス-活動調査 推計）。
-    e-Stat APIの公開テーブルは大分類レベルのみのため、中分類ごとの推計サンプルデータを使用。
-    Args: industry: 業種名（中分類）
-    Returns: DataFrame with columns [規模区分, 事業所数]。データなしの場合は空DataFrame。
+    令和3年経済センサス-活動調査 産業(大分類)別・従業者規模別 事業所数（秋田県）。
+    統計表ID: 0004005642
+    Args: industry: 大分類業種名（CENSUS_DAIBUNSHU_LIST の値）
+    Returns: DataFrame with columns [規模区分, 事業所数]
     """
-    key = _INDUSTRY_TO_SAMPLE_KEY.get(industry, industry)
-    if key in _SIZE_DISTRIBUTION_SAMPLE:
-        return pd.DataFrame(_SIZE_DISTRIBUTION_SAMPLE[key])
-    for sample_key in _SIZE_DISTRIBUTION_SAMPLE:
-        if sample_key in industry or industry in sample_key:
-            return pd.DataFrame(_SIZE_DISTRIBUTION_SAMPLE[sample_key])
-    return pd.DataFrame()
+    def _fallback() -> pd.DataFrame:
+        for key in _SIZE_DISTRIBUTION_SAMPLE:
+            if key in industry or industry in key:
+                return pd.DataFrame(_SIZE_DISTRIBUTION_SAMPLE[key])
+        return pd.DataFrame(_SIZE_DISTRIBUTION_DEFAULT)
 
+    if not is_api_key_set():
+        return _fallback()
 
-def has_size_distribution_data(industry: str) -> bool:
-    """業種に従業者規模別分布のデータ（サンプルまたはAPI）があるか確認する"""
-    key = _INDUSTRY_TO_SAMPLE_KEY.get(industry, industry)
-    if key in _SIZE_DISTRIBUTION_SAMPLE:
-        return True
-    for sample_key in _SIZE_DISTRIBUTION_SAMPLE:
-        if sample_key in industry or industry in sample_key:
-            return True
-    return False
+    try:
+        df, meta = fetch_stats_data("0004005642", area_code="05000", limit=10000)
+        if df.empty:
+            return _fallback()
+
+        cat01_meta = meta.get("cat01", {})
+
+        # 規模区分次元を探す
+        size_dim_key = None
+        size_dim_meta = {}
+        for dim_key, dim_map in meta.items():
+            if dim_key == "cat01":
+                continue
+            for name in dim_map.values():
+                if "1～4" in name or "1-4" in name:
+                    size_dim_key = dim_key
+                    size_dim_meta = dim_map
+                    break
+            if size_dim_key:
+                break
+
+        if size_dim_key is None:
+            return _fallback()
+
+        # 大分類コードを特定（完全一致優先、部分一致でフォールバック）
+        ind_code = None
+        for code, name in cat01_meta.items():
+            if code in ("00", "000") or any(s in name for s in ("合計", "総数")):
+                continue
+            if name == industry:
+                ind_code = code
+                break
+            if industry in name or name in industry:
+                ind_code = code
+
+        if ind_code is None:
+            return _fallback()
+
+        df_ind = df[df["cat01"] == ind_code] if "cat01" in df.columns else df
+
+        size_rows = []
+        for size_code, size_name in size_dim_meta.items():
+            if any(s in size_name for s in ("総数", "合計", "出向", "派遣")):
+                continue
+            std_label = _SIZE_LABEL_MAP.get(size_name)
+            if std_label is None:
+                continue
+            rows_s = df_ind[df_ind[size_dim_key] == size_code] if size_dim_key in df_ind.columns else pd.DataFrame()
+            if rows_s.empty:
+                continue
+            val = rows_s["value"].iloc[0]
+            if pd.isna(val):
+                continue
+            size_rows.append({"規模区分": std_label, "事業所数": int(val)})
+
+        if not size_rows:
+            return _fallback()
+
+        result = pd.DataFrame(size_rows)
+        result["_ord"] = result["規模区分"].apply(lambda x: _SIZE_ORDER.index(x) if x in _SIZE_ORDER else 99)
+        return result.sort_values("_ord").drop(columns=["_ord"]).reset_index(drop=True)
+
+    except Exception:
+        return _fallback()

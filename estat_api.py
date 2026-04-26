@@ -581,61 +581,63 @@ _SIZE_DISTRIBUTION_DEFAULT = [
     {"規模区分": "300人以上", "事業所数": 2},
 ]
 
+# 中分類 → 大分類サンプルデータキーのマッピング
+_INDUSTRY_TO_SAMPLE_KEY: dict[str, str] = {
+    "職別工事業": "建設業",
+    "設備工事業": "建設業",
+    "食品製造業": "製造業",
+    "飲食料品小売業": "小売業",
+    "道路旅客運送業": "運輸業・郵便業",
+    "道路貨物運送業": "運輸業・郵便業",
+    "持ち帰り・配達飲食サービス業": "飲食サービス業",
+    "旅行業": "生活関連サービス業",
+    "冠婚葬祭業": "生活関連サービス業",
+    "廃棄物処理業": "サービス業",
+    "自動車整備業": "サービス業",
+    "事業協同組合": "サービス業",
+    "商店街": "小売業",
+}
+
+_SIZE_DISTRIBUTION_SAMPLE["運輸業・郵便業"] = [
+    {"規模区分": "1-4人", "事業所数": 480},
+    {"規模区分": "5-9人", "事業所数": 280},
+    {"規模区分": "10-19人", "事業所数": 180},
+    {"規模区分": "20-29人", "事業所数": 70},
+    {"規模区分": "30-49人", "事業所数": 45},
+    {"規模区分": "50-99人", "事業所数": 28},
+    {"規模区分": "100-299人", "事業所数": 10},
+    {"規模区分": "300人以上", "事業所数": 3},
+]
+
+_SIZE_DISTRIBUTION_SAMPLE["生活関連サービス業"] = [
+    {"規模区分": "1-4人", "事業所数": 1100},
+    {"規模区分": "5-9人", "事業所数": 480},
+    {"規模区分": "10-19人", "事業所数": 180},
+    {"規模区分": "20-29人", "事業所数": 40},
+    {"規模区分": "30-49人", "事業所数": 18},
+    {"規模区分": "50-99人", "事業所数": 6},
+    {"規模区分": "100-299人", "事業所数": 1},
+    {"規模区分": "300人以上", "事業所数": 0},
+]
+
+_SIZE_DISTRIBUTION_SAMPLE["サービス業"] = [
+    {"規模区分": "1-4人", "事業所数": 750},
+    {"規模区分": "5-9人", "事業所数": 380},
+    {"規模区分": "10-19人", "事業所数": 200},
+    {"規模区分": "20-29人", "事業所数": 65},
+    {"規模区分": "30-49人", "事業所数": 35},
+    {"規模区分": "50-99人", "事業所数": 15},
+    {"規模区分": "100-299人", "事業所数": 4},
+    {"規模区分": "300人以上", "事業所数": 1},
+]
+
 
 def fetch_census_productivity() -> pd.DataFrame:
     """
-    令和3年経済センサス-活動調査から業種別 一人当たり付加価値額を取得する。
-    APIキー未設定またはAPI呼び出し失敗時はサンプルデータを返す。
+    令和3年経済センサス-活動調査に基づく業種別一人当たり付加価値額（推計サンプルデータ）。
     Returns: DataFrame with columns [業種, 付加価値額_百万円, 従業員数, 一人当たり生産性_万円]
     """
-    if not is_api_key_set():
-        return pd.DataFrame(_PRODUCTIVITY_SAMPLE)
-
-    try:
-        df, meta = fetch_stats_data(
-            stats_data_id="0003443038",
-            area_code=AKITA_AREA_CODE,
-            limit=5000,
-        )
-        if df.empty:
-            return pd.DataFrame(_PRODUCTIVITY_SAMPLE)
-
-        cat01_map = meta.get("cat01", {})
-        time_map = meta.get("time", {})
-
-        latest_time = None
-        if time_map:
-            latest_time = sorted(time_map.keys())[-1]
-
-        if latest_time and "time" in df.columns:
-            df = df[df["time"] == latest_time]
-
-        industry_map = meta.get("cat02", meta.get("cat01", {}))
-        if "cat02" in df.columns:
-            df["業種"] = df["cat02"].map(industry_map).fillna(df["cat02"])
-        elif "cat01" in df.columns:
-            df["業種"] = df["cat01"].map(cat01_map).fillna(df["cat01"])
-        else:
-            return pd.DataFrame(_PRODUCTIVITY_SAMPLE)
-
-        df_agg = (
-            df.groupby("業種")["value"]
-            .sum()
-            .reset_index()
-            .rename(columns={"value": "従業員数"})
-        )
-        df_agg = df_agg[df_agg["従業員数"] > 0]
-        if df_agg.empty:
-            return pd.DataFrame(_PRODUCTIVITY_SAMPLE)
-
-        df_agg["付加価値額_百万円"] = (df_agg["従業員数"] * 450).astype(int)
-        df_agg["一人当たり生産性_万円"] = (
-            (df_agg["付加価値額_百万円"] * 100 / df_agg["従業員数"]).round(0).astype(int)
-        )
-        return df_agg[["業種", "付加価値額_百万円", "従業員数", "一人当たり生産性_万円"]]
-
-    except Exception:
-        return pd.DataFrame(_PRODUCTIVITY_SAMPLE)
+    return pd.DataFrame(_PRODUCTIVITY_SAMPLE)
 
 
 def fetch_census_size_distribution(industry: str) -> pd.DataFrame:
@@ -645,48 +647,12 @@ def fetch_census_size_distribution(industry: str) -> pd.DataFrame:
     Args: industry: 業種名（中分類）
     Returns: DataFrame with columns [規模区分, 事業所数]
     """
-    size_labels = ["1-4人", "5-9人", "10-19人", "20-29人", "30-49人", "50-99人", "100-299人", "300人以上"]
-
-    def _fallback() -> pd.DataFrame:
-        for key in _SIZE_DISTRIBUTION_SAMPLE:
-            if key in industry or industry in key:
-                return pd.DataFrame(_SIZE_DISTRIBUTION_SAMPLE[key])
-        return pd.DataFrame(_SIZE_DISTRIBUTION_DEFAULT)
-
-    if not is_api_key_set():
-        return _fallback()
-
-    try:
-        df, meta = fetch_stats_data(
-            stats_data_id="0003443038",
-            area_code=AKITA_AREA_CODE,
-            limit=5000,
-        )
-        if df.empty:
-            return _fallback()
-
-        size_col = None
-        for col in df.columns:
-            if col.startswith("cat") and col != "cat01":
-                size_col = col
-                break
-
-        if size_col is None:
-            return _fallback()
-
-        size_map = meta.get(size_col, {})
-        df["規模区分_raw"] = df[size_col].map(size_map).fillna(df[size_col])
-
-        matched = []
-        for label in size_labels:
-            mask = df["規模区分_raw"].str.contains(label.replace("人", ""), na=False)
-            total = df.loc[mask, "value"].sum()
-            matched.append({"規模区分": label, "事業所数": int(total)})
-
-        result = pd.DataFrame(matched)
-        if result["事業所数"].sum() == 0:
-            return _fallback()
-        return result
-
-    except Exception:
-        return _fallback()
+    # 中分類名 → サンプルデータキーへのマッピングを適用
+    key = _INDUSTRY_TO_SAMPLE_KEY.get(industry, industry)
+    if key in _SIZE_DISTRIBUTION_SAMPLE:
+        return pd.DataFrame(_SIZE_DISTRIBUTION_SAMPLE[key])
+    # 部分一致でフォールバック
+    for sample_key in _SIZE_DISTRIBUTION_SAMPLE:
+        if sample_key in industry or industry in sample_key:
+            return pd.DataFrame(_SIZE_DISTRIBUTION_SAMPLE[sample_key])
+    return pd.DataFrame(_SIZE_DISTRIBUTION_DEFAULT)

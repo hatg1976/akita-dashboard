@@ -654,11 +654,14 @@ def fetch_census_productivity() -> pd.DataFrame:
         code_productivity = None     # 1人当たり純付加価値額
 
         for code, name in tab_meta.items():
-            if "１人当たり" in name or "1人当たり" in name:
+            # 「1人当たり」を最優先（「1事業所当たり」より先にチェック）
+            if ("１人当たり" in name or "1人当たり" in name) and "事業所" not in name:
                 code_productivity = code
-            elif "純付加価値額" in name:
+            # 「純付加価値額」で「当たり」が付かないもの（合計値）
+            elif "純付加価値額" in name and "当たり" not in name:
                 code_value_added = code
-            elif "事業従事者数" in name or "従業者数" in name:
+            # 「事業従事者数」で「当たり」が付かないもの（合計人数）
+            elif ("事業従事者数" in name or "従業者数" in name) and "当たり" not in name:
                 code_employees = code
 
         # 業種次元を特定（cat01 が業種）
@@ -688,20 +691,27 @@ def fetch_census_productivity() -> pd.DataFrame:
             value_added = _get_val(code_value_added)
             productivity = _get_val(code_productivity)
 
+            # 1人当たり生産性をAPIから直接取得（最優先）
+            # 単位変換: e-Stat は万円単位で返すことが多いが、千円の場合は変換
+            if productivity is not None and productivity > 100_000:
+                productivity = productivity / 100  # 千円 → 万円
+
+            # 付加価値額が取得できなかった場合スキップ
+            if value_added is None and productivity is None:
+                continue
+
+            # 従業員数が取れない or 明らかに1事業所当たり値の場合は付加価値額÷生産性で逆算
+            if (employees is None or employees == 0 or employees < 50) and productivity and value_added:
+                employees = int(value_added * 100 / productivity)
+
             if employees is None or employees == 0:
                 continue
 
-            # 付加価値額が取得できなかった場合スキップ
-            if value_added is None:
-                continue
-
-            # 1人当たり生産性の算出（百万円 × 100 ÷ 人 = 万円）
+            # 生産性がAPIから取れなかった場合のみ計算
             if productivity is None:
+                if value_added is None:
+                    continue
                 productivity = value_added * 100 / employees
-            # e-Stat が千円単位で返す場合は万円に変換（値が非常に大きい場合）
-            # 一般的な値域: 300〜2000万円/人。それより100倍大きければ千円単位と判断
-            elif productivity > 100_000:
-                productivity = productivity / 100  # 千円 → 万円
 
             rows.append({
                 "業種": ind_name,

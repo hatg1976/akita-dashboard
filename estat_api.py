@@ -873,3 +873,14 @@ def fetch_census_size_distribution(industry: str) -> pd.DataFrame:
 
     except Exception:
         return _fallback()
+
+
+def has_size_distribution_data(industry: str) -> bool:
+    """業種に従業者規模別分布のデータ（サンプルまたはAPI）があるか確認する"""
+    key = _INDUSTRY_TO_SAMPLE_KEY.get(industry, industry)
+    if key in _SIZE_DISTRIBUTION_SAMPLE:
+        return True
+    for sample_key in _SIZE_DISTRIBUTION_SAMPLE:
+        if sample_key in industry or industry in sample_key:
+            return True
+    return False

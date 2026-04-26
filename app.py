@@ -2774,9 +2774,10 @@ def page_industry_census():
         for major_info in hierarchy.values():
             all_categories.extend(major_info["categories"])
 
+        available = [c for c in all_categories if estat_api.has_size_distribution_data(c)]
         selected_industry = st.selectbox(
             "業種を選択（中分類）",
-            all_categories,
+            available,
             key="census_size_industry",
         )
 

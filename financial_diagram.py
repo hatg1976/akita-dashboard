@@ -4,6 +4,7 @@
 
 import streamlit as st
 import plotly.graph_objects as go
+from datetime import datetime
 
 # ── X レイアウト（均等 135px） ─────────────────────────────────────
 BS_A = (0,   95)
@@ -265,11 +266,14 @@ def page_financial():
         _PL_KEYS = ["売上高", "変動費", "固定費", "営業外収益", "営業外費用",
                     "特別利益", "特別損失", "法人税等", "人件費", "減価償却費"]
 
+        _now = datetime.now()
+        _latest_year = _now.year - 1 if _now.month >= 4 else _now.year - 2
+
         yr_cols = st.columns(3)
         years = []
         for i in range(3):
             with yr_cols[i]:
-                y = st.number_input(f"第{i+1}期（西暦）", value=2023+i,
+                y = st.number_input(f"第{i+1}期（西暦）", value=_latest_year - 2 + i,
                     min_value=1900, max_value=2100, step=1,
                     disabled=(i >= n_years), key=f"year_{i}")
                 years.append(int(y))

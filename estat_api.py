@@ -975,27 +975,71 @@ def fetch_industry_municipal_matrix() -> tuple[pd.DataFrame, str]:
     if not is_api_key_set():
         return _no_data("no_key")
 
-    # 市区町村コードを8件ずつバッチに分割して取得
+    # 各次元の「合計」コードを特定する（確信がある場合のみ返す）
+    def _total_code(dim: dict) -> Optional[str]:
+        # 優先1: code が "0", "00", "000" のいずれか（e-Stat の標準合計コード）
+        for zero_code in ("0", "00", "000"):
+            if zero_code in dim:
+                return zero_code
+        # 優先2: name が合計系ラベルに完全一致
+        total_names = {"合計", "総数", "計", "総計"}
+        for code, name in dim.items():
+            if name in total_names:
+                return code
+        # 見つからない場合は None（不確かな推測はしない）
+        return None
+
+    # ── Step 1: メタ情報のみ取得（1件だけ）して次元構造を把握 ──────────────
+    try:
+        _, meta = fetch_stats_data(
+            "0004005655",
+            area_code=None,
+            limit=1,
+            extra_params={"cdArea": "05201"},
+        )
+    except Exception:
+        return _no_data("api_error")
+
+    if not meta:
+        return _no_data("api_error")
+
+    # 産業以外の次元（開設時期・経営組織等）の合計コードを API パラメータとして組み立てる
+    # → e-Stat API の cdCat02, cdCat03 に合計コードを渡し、API 側でフィルタリングさせる
+    cat_api_params: dict = {}
+    for dim_key in ["cat02", "cat03", "cat04", "cat05"]:
+        if dim_key in meta and meta[dim_key]:
+            tc = _total_code(meta[dim_key])
+            if tc is not None:
+                # "cat02" → "cdCat02", "cat03" → "cdCat03"
+                api_param = "cdCat" + dim_key[3:].zfill(2)
+                cat_api_params[api_param] = tc
+
+    # tab 次元（事業所数）があれば絞り込む
+    if "tab" in meta:
+        for code, name in meta["tab"].items():
+            if "事業所数" in name and "当たり" not in name:
+                cat_api_params["cdTab"] = code
+                break
+
+    # ── Step 2: 市区町村を 8 件ずつバッチで取得 ────────────────────────────
     muni_codes = list(_AKITA_MUNICIPALITIES.keys())
     batches = [muni_codes[i:i+8] for i in range(0, len(muni_codes), 8)]
 
-    all_rows: list[dict] = []
-    meta: dict = {}
+    all_rows: list[pd.DataFrame] = []
 
     for batch in batches:
         try:
-            df_batch, meta_batch = fetch_stats_data(
+            extra = {**cat_api_params, "cdArea": ",".join(batch)}
+            df_batch, _ = fetch_stats_data(
                 "0004005655",
                 area_code=None,
                 limit=50000,
-                extra_params={"cdArea": ",".join(batch)},
+                extra_params=extra,
             )
             if not df_batch.empty:
                 all_rows.append(df_batch)
-                if not meta:
-                    meta = meta_batch
         except Exception:
-            continue  # バッチ失敗は無視して次へ
+            continue
 
     if not all_rows:
         return _no_data("api_error")
@@ -1005,34 +1049,22 @@ def fetch_industry_municipal_matrix() -> tuple[pd.DataFrame, str]:
     try:
         cat01_meta = meta.get("cat01", {})
 
-        # 各次元の「合計」コードを特定
-        def _total_code(dim: dict) -> Optional[str]:
-            for code, name in dim.items():
-                if name in ("合計", "総数", "計", "総計") or code in ("00", "000", "0"):
-                    return code
-            return next(iter(dim), None)
-
-        # 余分な次元（開設時期・経営組織）を合計行に絞り込む
-        for dim_key in ["cat02", "cat03", "cat04", "cat05"]:
-            if dim_key in df.columns and dim_key in meta:
-                tc = _total_code(meta[dim_key])
-                if tc:
-                    df = df[df[dim_key] == tc]
-
-        # 事業所数タブに絞り込む
-        if "tab" in df.columns and "tab" in meta:
-            for code, name in meta["tab"].items():
-                if "事業所数" in name and "当たり" not in name:
-                    df = df[df["tab"] == code]
-                    break
-
-        # 秋田県市区町村のみ
+        # 秋田県市区町村のみ（念のため area でも絞り込む）
         akita_set = set(_AKITA_MUNICIPALITIES.keys())
         if "area" in df.columns:
             df = df[df["area"].isin(akita_set)]
 
         if df.empty:
             return _no_data("api_error")
+
+        # API パラメータで絞れなかった次元が残る場合のポストフィルタ
+        for dim_key in ["cat02", "cat03", "cat04", "cat05"]:
+            if dim_key in df.columns and dim_key in meta and dim_key not in [
+                k.lower().replace("cd", "").replace("cat0", "cat0") for k in cat_api_params
+            ]:
+                tc = _total_code(meta[dim_key])
+                if tc is not None:
+                    df = df[df[dim_key] == tc]
 
         # 産業・市区町村でピボット
         # "全産業（S_公務を除く）" のような全産業合計行も除外する
@@ -1043,24 +1075,34 @@ def fetch_industry_municipal_matrix() -> tuple[pd.DataFrame, str]:
 
         rows_pivot: dict[str, dict] = {}
         for ind_code, ind_name in valid_cats.items():
-            display = next((c for c in CENSUS_DAIBUNSHU_LIST if c in ind_name or ind_name in c), ind_name)
-            df_ind = df[df["cat01"] == ind_code].copy() if "cat01" in df.columns else pd.DataFrame()
+            display = next(
+                (c for c in CENSUS_DAIBUNSHU_LIST if c in ind_name or ind_name in c),
+                ind_name,
+            )
+            if "cat01" not in df.columns:
+                continue
+            df_ind = df[df["cat01"] == ind_code].copy()
             if df_ind.empty:
                 continue
+
             city_row: dict = {}
-            # 開設時期・経営組織の合計コード絞り込みが不完全な場合に
-            # 地域ごとに複数行が残ることがある。最大値（合計行が最大になるはず）を採用する
             if "area" in df_ind.columns:
+                # 念のため地域ごとに重複排除（残っている場合は最大値=合計行を採用）
                 dedup = df_ind.groupby("area", as_index=False)["value"].max()
                 for _, row in dedup.iterrows():
-                    city = _AKITA_MUNICIPALITIES.get(str(row.get("area", "")), str(row.get("area", "")))
+                    city = _AKITA_MUNICIPALITIES.get(
+                        str(row.get("area", "")), str(row.get("area", ""))
+                    )
                     val = row.get("value")
                     city_row[city] = "-" if (val is None or pd.isna(val) or val == 0) else int(val)
             else:
                 for _, row in df_ind.iterrows():
-                    city = _AKITA_MUNICIPALITIES.get(str(row.get("area", "")), str(row.get("area", "")))
+                    city = _AKITA_MUNICIPALITIES.get(
+                        str(row.get("area", "")), str(row.get("area", ""))
+                    )
                     val = row.get("value")
                     city_row[city] = "-" if (val is None or pd.isna(val) or val == 0) else int(val)
+
             if city_row:
                 rows_pivot[display] = city_row
 

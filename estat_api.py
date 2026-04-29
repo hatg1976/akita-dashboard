@@ -1067,18 +1067,40 @@ def fetch_industry_municipal_matrix() -> tuple[pd.DataFrame, str]:
                     df = df[df[dim_key] == tc]
 
         # 産業・市区町村でピボット
-        # "全産業（S_公務を除く）" のような全産業合計行も除外する
+        # ・"全産業（S_公務を除く）"（AR）= 全産業合計行 → 除外
+        # ・"農林漁業"（A）= 個人農家含む農林業センサスベースの計上で
+        #   他産業と比較不能な大きな数値になるため除外
+        _EXCLUDE_KEYWORDS = ("合計", "総数", "全産業", "農林漁業", "農林水産")
         valid_cats = {
             c: n for c, n in cat01_meta.items()
-            if c not in ("00", "000") and not any(s in n for s in ("合計", "総数", "全産業"))
+            if c not in ("00", "000") and not any(s in n for s in _EXCLUDE_KEYWORDS)
         }
+
+        def _match_industry(ind_name: str) -> str:
+            """API の産業名を CENSUS_DAIBUNSHU_LIST の表記に統一する。
+            API は「，」（全角カンマ）、アプリは「・」（中点）を使うため正規化して照合する。"""
+            def _norm(s: str) -> str:
+                return s.replace("，", "・").replace("、", "・")
+            ind_n = _norm(ind_name)
+            # 1. 正規化後に完全一致
+            for c in CENSUS_DAIBUNSHU_LIST:
+                if _norm(c) == ind_n:
+                    return c
+            # 2. 一方が他方を含む部分一致
+            for c in CENSUS_DAIBUNSHU_LIST:
+                cn = _norm(c)
+                if cn in ind_n or ind_n in cn:
+                    return c
+            # 3. 先頭セグメント（区切り前）が一致（「不動産業，物品質貸業」等の表記揺れに対応）
+            ind_first = ind_n.split("・")[0]
+            for c in CENSUS_DAIBUNSHU_LIST:
+                if ind_first and _norm(c).split("・")[0] == ind_first:
+                    return c
+            return ind_name  # マッチなしの場合は API 名をそのまま使用
 
         rows_pivot: dict[str, dict] = {}
         for ind_code, ind_name in valid_cats.items():
-            display = next(
-                (c for c in CENSUS_DAIBUNSHU_LIST if c in ind_name or ind_name in c),
-                ind_name,
-            )
+            display = _match_industry(ind_name)
             if "cat01" not in df.columns:
                 continue
             df_ind = df[df["cat01"] == ind_code].copy()

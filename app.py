@@ -2909,7 +2909,7 @@ def page_industry_matrix():
 
     st.dataframe(styled, use_container_width=True, height=min(50 + len(df_display) * 35, 700))
 
-    st.caption("「-」は秘匿処理または事業所なし")
+    st.caption("「-」は秘匿処理または事業所なし　※農林漁業は個人農家を含む農林業センサスベースの計上のため除外しています")
 
     # CSVダウンロード
     st.download_button(
@@ -2918,28 +2918,6 @@ def page_industry_matrix():
         "industry_municipal_matrix.csv",
         mime="text/csv",
     )
-
-    # ── デバッグ情報（API レスポンスの次元構造確認用） ─────────────────────
-    with st.expander("🔧 データ診断（次元構造の確認）", expanded=False):
-        try:
-            df_dbg, meta_dbg = estat_api.fetch_stats_data(
-                "0004005655",
-                area_code=None,
-                limit=50,
-                extra_params={"cdArea": "05201"},
-            )
-            st.markdown("**cat01（産業？）:**")
-            st.json(meta_dbg.get("cat01", {}))
-            st.markdown("**cat02:**")
-            st.json(meta_dbg.get("cat02", {}))
-            st.markdown("**cat03:**")
-            st.json(meta_dbg.get("cat03", {}))
-            st.markdown("**tab:**")
-            st.json(meta_dbg.get("tab", {}))
-            st.markdown("**area（秋田市のみ）サンプル行 (先頭20件):**")
-            st.dataframe(df_dbg.head(20) if not df_dbg.empty else pd.DataFrame())
-        except Exception as e:
-            st.error(f"診断データ取得エラー: {e}")
 
     st.markdown("---")
 

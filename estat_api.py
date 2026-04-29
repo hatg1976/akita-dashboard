@@ -975,140 +975,101 @@ def fetch_industry_municipal_matrix() -> tuple[pd.DataFrame, str]:
     if not is_api_key_set():
         return _no_data("no_key")
 
+    # 市区町村コードを8件ずつバッチに分割して取得
+    muni_codes = list(_AKITA_MUNICIPALITIES.keys())
+    batches = [muni_codes[i:i+8] for i in range(0, len(muni_codes), 8)]
+
+    all_rows: list[dict] = []
+    meta: dict = {}
+
+    for batch in batches:
+        try:
+            df_batch, meta_batch = fetch_stats_data(
+                "0004005655",
+                area_code=None,
+                limit=50000,
+                extra_params={"cdArea": ",".join(batch)},
+            )
+            if not df_batch.empty:
+                all_rows.append(df_batch)
+                if not meta:
+                    meta = meta_batch
+        except Exception:
+            continue  # バッチ失敗は無視して次へ
+
+    if not all_rows:
+        return _no_data("api_error")
+
+    df = pd.concat(all_rows, ignore_index=True)
+
     try:
-        # 秋田県の全市区町村コードをカンマ区切りで指定
-        akita_codes = ",".join(_AKITA_MUNICIPALITIES.keys())
-        df, meta = fetch_stats_data(
-            "0004005655",
-            area_code=None,
-            limit=100000,
-            extra_params={"cdArea": akita_codes},
-        )
+        cat01_meta = meta.get("cat01", {})
+
+        # 各次元の「合計」コードを特定
+        def _total_code(dim: dict) -> Optional[str]:
+            for code, name in dim.items():
+                if name in ("合計", "総数", "計", "総計") or code in ("00", "000", "0"):
+                    return code
+            return next(iter(dim), None)
+
+        # 余分な次元（開設時期・経営組織）を合計行に絞り込む
+        for dim_key in ["cat02", "cat03", "cat04", "cat05"]:
+            if dim_key in df.columns and dim_key in meta:
+                tc = _total_code(meta[dim_key])
+                if tc:
+                    df = df[df[dim_key] == tc]
+
+        # 事業所数タブに絞り込む
+        if "tab" in df.columns and "tab" in meta:
+            for code, name in meta["tab"].items():
+                if "事業所数" in name and "当たり" not in name:
+                    df = df[df["tab"] == code]
+                    break
+
+        # 秋田県市区町村のみ
+        akita_set = set(_AKITA_MUNICIPALITIES.keys())
+        if "area" in df.columns:
+            df = df[df["area"].isin(akita_set)]
 
         if df.empty:
             return _no_data("api_error")
 
-        # ---- 次元コードを特定 ----
-        # area 次元（市区町村コード）
-        area_meta = meta.get("area", {})
-        # cat01 次元（産業大分類）
-        cat01_meta = meta.get("cat01", {})
-        # tab 次元（表章項目）→ 事業所数のコードを探す
-        tab_meta = meta.get("tab", {})
-
-        # 事業所数のコードを特定
-        estab_code = None
-        for code, name in tab_meta.items():
-            if "事業所数" in name and "当たり" not in name:
-                estab_code = code
-                break
-
-        # 開設時期・経営組織の「合計」コードを探す（総数 / 計）
-        def _find_total_code(dim_meta: dict) -> Optional[str]:
-            for code, name in dim_meta.items():
-                if name in ("合計", "総数", "計", "総計") or code in ("00", "000", "0"):
-                    return code
-            # フォールバック: 最初のコード
-            return next(iter(dim_meta), None)
-
-        # 開設時期次元
-        tclass_meta = meta.get("cat02", {}) or meta.get("tclass1", {})
-        tclass_total = _find_total_code(tclass_meta) if tclass_meta else None
-
-        # 経営組織次元
-        org_meta = meta.get("cat03", {}) or meta.get("cat04", {})
-        org_total = _find_total_code(org_meta) if org_meta else None
-
-        # ---- 秋田県の市区町村コードでフィルタ ----
-        akita_codes = set(_AKITA_MUNICIPALITIES.keys())
-        if "area" in df.columns:
-            df_akita = df[df["area"].isin(akita_codes)].copy()
-        else:
-            return _no_data("api_error")
-
-        # ---- 事業所数のみ抽出 ----
-        if estab_code and "tab" in df_akita.columns:
-            df_akita = df_akita[df_akita["tab"] == estab_code]
-
-        # ---- 開設時期の合計行のみ ----
-        cat02_col = "cat02" if "cat02" in df_akita.columns else None
-        if cat02_col and tclass_total:
-            df_akita = df_akita[df_akita[cat02_col] == tclass_total]
-
-        # ---- 経営組織の合計行のみ ----
-        cat03_col = "cat03" if "cat03" in df_akita.columns else (
-            "cat04" if "cat04" in df_akita.columns else None
-        )
-        if cat03_col and org_total:
-            df_akita = df_akita[df_akita[cat03_col] == org_total]
-
-        if df_akita.empty:
-            return _no_data("api_error")
-
-        # ---- 産業大分類コードを名称にマッピング ----
-        # 合計・総数行を除外
-        valid_ind_codes = {
-            code: name for code, name in cat01_meta.items()
-            if code not in ("00", "000") and "合計" not in name and "総数" not in name and "計" == name[-1:] is False
+        # 産業・市区町村でピボット
+        valid_cats = {
+            c: n for c, n in cat01_meta.items()
+            if c not in ("00", "000") and not any(s in n for s in ("合計", "総数"))
         }
 
-        # ---- ピボット作成 ----
-        rows_pivot = {}
-        for ind_code, ind_name in valid_ind_codes.items():
-            # CENSUS_DAIBUNSHU_LIST の表示名に合わせる
-            display_name = ind_name
-            for canon in CENSUS_DAIBUNSHU_LIST:
-                if canon in ind_name or ind_name in canon:
-                    display_name = canon
-                    break
-
-            df_ind = df_akita[df_akita["cat01"] == ind_code] if "cat01" in df_akita.columns else pd.DataFrame()
+        rows_pivot: dict[str, dict] = {}
+        for ind_code, ind_name in valid_cats.items():
+            display = next((c for c in CENSUS_DAIBUNSHU_LIST if c in ind_name or ind_name in c), ind_name)
+            df_ind = df[df["cat01"] == ind_code] if "cat01" in df.columns else pd.DataFrame()
             if df_ind.empty:
                 continue
-
-            city_row: dict[str, object] = {}
+            city_row: dict = {}
             for _, row in df_ind.iterrows():
-                area_code_val = row.get("area", "")
-                city_name = _AKITA_MUNICIPALITIES.get(area_code_val, area_code_val)
+                city = _AKITA_MUNICIPALITIES.get(row.get("area", ""), row.get("area", ""))
                 val = row.get("value")
-                if pd.isna(val) or val is None:
-                    city_row[city_name] = "-"
-                elif val == 0:
-                    city_row[city_name] = "-"
-                else:
-                    city_row[city_name] = int(val)
-
+                city_row[city] = "-" if (val is None or pd.isna(val) or val == 0) else int(val)
             if city_row:
-                rows_pivot[display_name] = city_row
+                rows_pivot[display] = city_row
 
         if not rows_pivot:
             return _no_data("api_error")
 
-        # CENSUS_DAIBUNSHU_LIST の順番で並べる
-        ordered_rows = {}
-        for ind in CENSUS_DAIBUNSHU_LIST:
-            if ind in rows_pivot:
-                ordered_rows[ind] = rows_pivot[ind]
-        # リストにない名前はそのまま追加
-        for ind in rows_pivot:
-            if ind not in ordered_rows:
-                ordered_rows[ind] = rows_pivot[ind]
+        ordered = {ind: rows_pivot[ind] for ind in CENSUS_DAIBUNSHU_LIST if ind in rows_pivot}
+        ordered.update({k: v for k, v in rows_pivot.items() if k not in ordered})
 
-        # 市区町村を人口規模順（秋田市を先頭）に並べる
         city_order = list(_AKITA_MUNICIPALITIES.values())
-        all_cities_in_data = []
-        for row in ordered_rows.values():
-            for c in row.keys():
-                if c not in all_cities_in_data:
-                    all_cities_in_data.append(c)
-        sorted_cities = sorted(
-            all_cities_in_data,
-            key=lambda c: city_order.index(c) if c in city_order else 999,
-        )
+        all_cities = []
+        for r in ordered.values():
+            for c in r:
+                if c not in all_cities:
+                    all_cities.append(c)
+        sorted_cities = sorted(all_cities, key=lambda c: city_order.index(c) if c in city_order else 999)
 
-        df_pivot = pd.DataFrame(ordered_rows).T.reindex(columns=sorted_cities)
+        df_pivot = pd.DataFrame(ordered).T.reindex(columns=sorted_cities)
         df_pivot.index.name = "産業大分類"
-
         return df_pivot, "令和3年経済センサス-活動調査（2021年）実績値"
 
     except Exception:

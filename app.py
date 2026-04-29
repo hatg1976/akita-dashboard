@@ -2885,15 +2885,6 @@ def page_industry_matrix():
         lambda row: sum(_to_int(v) for v in row), axis=1
     )
 
-    # 取得できた市区町村数を確認して不完全な場合に注記
-    expected_cities = len(estat_api._AKITA_MUNICIPALITIES)
-    actual_cities = len([c for c in df_display.columns if c != "合計"])
-    if actual_cities < expected_cities:
-        st.warning(
-            f"一部の市区町村データを取得できませんでした（{actual_cities}/{expected_cities}市区町村）。"
-            "e-Stat APIの応答制限により表示できない市区町村があります。"
-        )
-
     # 総事業所数メトリクス
     total_est = df_display["合計"].sum()
     st.metric("秋田県 総事業所数（民営）", f"{total_est:,} 所")

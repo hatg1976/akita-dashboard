@@ -850,3 +850,273 @@ def fetch_census_size_distribution(industry: str) -> pd.DataFrame:
 
     except Exception:
         return _fallback()
+
+
+# ---------------------------------------------------------------------------
+# 産業(大分類)×市区町村別 事業所数マトリックス（秋田県）
+# ---------------------------------------------------------------------------
+
+# 秋田県市区町村コード → 名称
+_AKITA_MUNICIPALITIES: dict[str, str] = {
+    "05201": "秋田市",
+    "05202": "能代市",
+    "05203": "横手市",
+    "05204": "大館市",
+    "05205": "男鹿市",
+    "05206": "湯沢市",
+    "05207": "鹿角市",
+    "05208": "由利本荘市",
+    "05209": "潟上市",
+    "05210": "大仙市",
+    "05211": "北秋田市",
+    "05213": "にかほ市",
+    "05214": "仙北市",
+    "05303": "小坂町",
+    "05327": "上小阿仁村",
+    "05346": "藤里町",
+    "05348": "三種町",
+    "05349": "八峰町",
+    "05361": "五城目町",
+    "05363": "八郎潟町",
+    "05366": "井川町",
+    "05368": "大潟村",
+    "05434": "美郷町",
+    "05463": "羽後町",
+    "05464": "東成瀬村",
+}
+
+# サンプルデータ: 秋田市が全体の約40%を占めるリアルな比率
+_INDUSTRY_MUNICIPAL_SAMPLE: dict[str, dict[str, int]] = {
+    "農林漁業": {
+        "秋田市": 180, "横手市": 310, "大館市": 220, "由利本荘市": 280,
+        "能代市": 190, "大仙市": 350, "鹿角市": 150, "湯沢市": 160,
+    },
+    "鉱業・採石業・砂利採取業": {
+        "秋田市": 8, "横手市": 5, "大館市": 6, "由利本荘市": 7,
+        "能代市": 4, "大仙市": 6, "鹿角市": 5, "湯沢市": 3,
+    },
+    "建設業": {
+        "秋田市": 1050, "横手市": 480, "大館市": 370, "由利本荘市": 420,
+        "能代市": 310, "大仙市": 490, "鹿角市": 210, "湯沢市": 230,
+    },
+    "製造業": {
+        "秋田市": 620, "横手市": 340, "大館市": 290, "由利本荘市": 260,
+        "能代市": 200, "大仙市": 310, "鹿角市": 150, "湯沢市": 180,
+    },
+    "電気・ガス・熱供給・水道業": {
+        "秋田市": 28, "横手市": 12, "大館市": 10, "由利本荘市": 11,
+        "能代市": 9, "大仙市": 13, "鹿角市": 6, "湯沢市": 7,
+    },
+    "情報通信業": {
+        "秋田市": 195, "横手市": 38, "大館市": 28, "由利本荘市": 22,
+        "能代市": 18, "大仙市": 32, "鹿角市": 12, "湯沢市": 14,
+    },
+    "運輸業・郵便業": {
+        "秋田市": 310, "横手市": 130, "大館市": 110, "由利本荘市": 120,
+        "能代市": 90, "大仙市": 140, "鹿角市": 65, "湯沢市": 70,
+    },
+    "卸売業・小売業": {
+        "秋田市": 3200, "横手市": 1050, "大館市": 850, "由利本荘市": 920,
+        "能代市": 720, "大仙市": 1100, "鹿角市": 420, "湯沢市": 480,
+    },
+    "金融業・保険業": {
+        "秋田市": 280, "横手市": 90, "大館市": 72, "由利本荘市": 78,
+        "能代市": 58, "大仙市": 95, "鹿角市": 38, "湯沢市": 42,
+    },
+    "不動産業・物品賃貸業": {
+        "秋田市": 680, "横手市": 160, "大館市": 130, "由利本荘市": 140,
+        "能代市": 110, "大仙市": 170, "鹿角市": 65, "湯沢市": 75,
+    },
+    "学術研究・専門・技術サービス業": {
+        "秋田市": 420, "横手市": 110, "大館市": 85, "由利本荘市": 90,
+        "能代市": 68, "大仙市": 115, "鹿角市": 42, "湯沢市": 48,
+    },
+    "宿泊業・飲食サービス業": {
+        "秋田市": 1850, "横手市": 580, "大館市": 480, "由利本荘市": 430,
+        "能代市": 350, "大仙市": 560, "鹿角市": 280, "湯沢市": 290,
+    },
+    "生活関連サービス業・娯楽業": {
+        "秋田市": 870, "横手市": 310, "大館市": 250, "由利本荘市": 240,
+        "能代市": 190, "大仙市": 300, "鹿角市": 130, "湯沢市": 150,
+    },
+    "教育・学習支援業": {
+        "秋田市": 420, "横手市": 130, "大館市": 105, "由利本荘市": 110,
+        "能代市": 85, "大仙市": 135, "鹿角市": 55, "湯沢市": 62,
+    },
+    "医療・福祉": {
+        "秋田市": 1420, "横手市": 490, "大館市": 390, "由利本荘市": 410,
+        "能代市": 310, "大仙市": 480, "鹿角市": 210, "湯沢市": 230,
+    },
+    "複合サービス事業": {
+        "秋田市": 85, "横手市": 48, "大館市": 38, "由利本荘市": 42,
+        "能代市": 32, "大仙市": 52, "鹿角市": 22, "湯沢市": 25,
+    },
+    "サービス業（他に分類されないもの）": {
+        "秋田市": 680, "横手市": 220, "大館市": 175, "由利本荘市": 185,
+        "能代市": 140, "大仙市": 220, "鹿角市": 95, "湯沢市": 110,
+    },
+}
+
+
+def fetch_industry_municipal_matrix() -> tuple[pd.DataFrame, str]:
+    """
+    令和3年経済センサス-活動調査 産業(大分類)×市区町村別 事業所数（秋田県）
+    統計表ID: 0004005655
+
+    Returns:
+        (df_pivot, source_note)
+          df_pivot: pivot table with 産業 as index, 市区町村 as columns, 事業所数 as values
+                   "-" for suppressed/missing cells
+          source_note: data source description string
+    """
+    def _fallback() -> tuple[pd.DataFrame, str]:
+        rows = {}
+        all_cities = list(next(iter(_INDUSTRY_MUNICIPAL_SAMPLE.values())).keys())
+        for ind in CENSUS_DAIBUNSHU_LIST:
+            city_vals = _INDUSTRY_MUNICIPAL_SAMPLE.get(ind, {})
+            rows[ind] = {city: city_vals.get(city, "-") for city in all_cities}
+        df = pd.DataFrame(rows).T
+        df.index.name = "産業大分類"
+        return df, "推計サンプルデータ（令和3年経済センサス-活動調査 参考値）"
+
+    if not is_api_key_set():
+        return _fallback()
+
+    try:
+        # 表ID: 産業(大分類)、開設時期、経営組織(4区分)別民営事業所数－全国、都道府県、市区町村
+        # area_code なし → 秋田県の市区町村データをレスポンス側でフィルタ
+        df, meta = fetch_stats_data(
+            "0004005655",
+            area_code=None,
+            limit=100000,
+            extra_params={"cdArea": "05"},  # 秋田県プレフィックスで絞り込み
+        )
+
+        if df.empty:
+            return _fallback()
+
+        # ---- 次元コードを特定 ----
+        # area 次元（市区町村コード）
+        area_meta = meta.get("area", {})
+        # cat01 次元（産業大分類）
+        cat01_meta = meta.get("cat01", {})
+        # tab 次元（表章項目）→ 事業所数のコードを探す
+        tab_meta = meta.get("tab", {})
+
+        # 事業所数のコードを特定
+        estab_code = None
+        for code, name in tab_meta.items():
+            if "事業所数" in name and "当たり" not in name:
+                estab_code = code
+                break
+
+        # 開設時期・経営組織の「合計」コードを探す（総数 / 計）
+        def _find_total_code(dim_meta: dict) -> Optional[str]:
+            for code, name in dim_meta.items():
+                if name in ("合計", "総数", "計", "総計") or code in ("00", "000", "0"):
+                    return code
+            # フォールバック: 最初のコード
+            return next(iter(dim_meta), None)
+
+        # 開設時期次元
+        tclass_meta = meta.get("cat02", {}) or meta.get("tclass1", {})
+        tclass_total = _find_total_code(tclass_meta) if tclass_meta else None
+
+        # 経営組織次元
+        org_meta = meta.get("cat03", {}) or meta.get("cat04", {})
+        org_total = _find_total_code(org_meta) if org_meta else None
+
+        # ---- 秋田県の市区町村コードでフィルタ ----
+        akita_codes = set(_AKITA_MUNICIPALITIES.keys())
+        if "area" in df.columns:
+            df_akita = df[df["area"].isin(akita_codes)].copy()
+        else:
+            return _fallback()
+
+        # ---- 事業所数のみ抽出 ----
+        if estab_code and "tab" in df_akita.columns:
+            df_akita = df_akita[df_akita["tab"] == estab_code]
+
+        # ---- 開設時期の合計行のみ ----
+        cat02_col = "cat02" if "cat02" in df_akita.columns else None
+        if cat02_col and tclass_total:
+            df_akita = df_akita[df_akita[cat02_col] == tclass_total]
+
+        # ---- 経営組織の合計行のみ ----
+        cat03_col = "cat03" if "cat03" in df_akita.columns else (
+            "cat04" if "cat04" in df_akita.columns else None
+        )
+        if cat03_col and org_total:
+            df_akita = df_akita[df_akita[cat03_col] == org_total]
+
+        if df_akita.empty:
+            return _fallback()
+
+        # ---- 産業大分類コードを名称にマッピング ----
+        # 合計・総数行を除外
+        valid_ind_codes = {
+            code: name for code, name in cat01_meta.items()
+            if code not in ("00", "000") and "合計" not in name and "総数" not in name and "計" == name[-1:] is False
+        }
+
+        # ---- ピボット作成 ----
+        rows_pivot = {}
+        for ind_code, ind_name in valid_ind_codes.items():
+            # CENSUS_DAIBUNSHU_LIST の表示名に合わせる
+            display_name = ind_name
+            for canon in CENSUS_DAIBUNSHU_LIST:
+                if canon in ind_name or ind_name in canon:
+                    display_name = canon
+                    break
+
+            df_ind = df_akita[df_akita["cat01"] == ind_code] if "cat01" in df_akita.columns else pd.DataFrame()
+            if df_ind.empty:
+                continue
+
+            city_row: dict[str, object] = {}
+            for _, row in df_ind.iterrows():
+                area_code_val = row.get("area", "")
+                city_name = _AKITA_MUNICIPALITIES.get(area_code_val, area_code_val)
+                val = row.get("value")
+                if pd.isna(val) or val is None:
+                    city_row[city_name] = "-"
+                elif val == 0:
+                    city_row[city_name] = "-"
+                else:
+                    city_row[city_name] = int(val)
+
+            if city_row:
+                rows_pivot[display_name] = city_row
+
+        if not rows_pivot:
+            return _fallback()
+
+        # CENSUS_DAIBUNSHU_LIST の順番で並べる
+        ordered_rows = {}
+        for ind in CENSUS_DAIBUNSHU_LIST:
+            if ind in rows_pivot:
+                ordered_rows[ind] = rows_pivot[ind]
+        # リストにない名前はそのまま追加
+        for ind in rows_pivot:
+            if ind not in ordered_rows:
+                ordered_rows[ind] = rows_pivot[ind]
+
+        # 市区町村を人口規模順（秋田市を先頭）に並べる
+        city_order = list(_AKITA_MUNICIPALITIES.values())
+        all_cities_in_data = []
+        for row in ordered_rows.values():
+            for c in row.keys():
+                if c not in all_cities_in_data:
+                    all_cities_in_data.append(c)
+        sorted_cities = sorted(
+            all_cities_in_data,
+            key=lambda c: city_order.index(c) if c in city_order else 999,
+        )
+
+        df_pivot = pd.DataFrame(ordered_rows).T.reindex(columns=sorted_cities)
+        df_pivot.index.name = "産業大分類"
+
+        return df_pivot, "令和3年経済センサス-活動調査（2021年）実績値"
+
+    except Exception:
+        return _fallback()

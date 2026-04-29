@@ -126,6 +126,7 @@ page = st.sidebar.selectbox(
     "表示するデータ",
     ["📊 総合概要", "👥 人口動態", "🏭 産業構造", "💰 経済指標",
      "🔎 業種別分析", "📋 特定業種支援ガイド", "📊 業種別生産性分析",
+     "🗺️ 産業×市町村マトリックス",
      "🗾 東北4県比較", "🏘️ 市町村比較",
      "📈 地域市場シェア分析",
      "💹 決算書図解ツール",
@@ -133,6 +134,16 @@ page = st.sidebar.selectbox(
      "🔌 e-Stat API連携"],
 )
 
+st.sidebar.markdown("---")
+_pptx_path = "downloads/清水さん_秋田県賃上げ緊急支援事業事務局_修正済み.pptx"
+if __import__("os").path.exists(_pptx_path):
+    with open(_pptx_path, "rb") as _f:
+        st.sidebar.download_button(
+            label="📥 賃上げ支援申請ガイド（PPTX）",
+            data=_f,
+            file_name="賃上げ緊急支援事業_申請書類記載例.pptx",
+            mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        )
 st.sidebar.markdown("---")
 st.sidebar.markdown("**データ出典**")
 st.sidebar.markdown("- 国勢調査（総務省）")
@@ -2840,6 +2851,108 @@ def page_industry_census():
                 st.metric("大規模事業所（100人以上）", f"{large_count:,}所", f"全体の{large_pct}%")
 
 
+# ============================================================
+# 産業×市町村マトリックスページ
+# ============================================================
+def page_industry_matrix():
+    st.title("🗺️ 産業×市町村マトリックス")
+    st.caption("令和3年経済センサス-活動調査に基づく産業大分類別・市町村別の事業所数")
+    st.markdown("---")
+
+    with st.spinner("データを読み込み中..."):
+        df_pivot, source_note = estat_api.fetch_industry_municipal_matrix()
+
+    st.caption(source_note)
+
+    if df_pivot.empty:
+        st.warning("データを取得できませんでした。")
+        return
+
+    # 合計列を追加（数値セルのみ合算、"-" は 0 扱い）
+    def _to_int(v):
+        try:
+            return int(v)
+        except Exception:
+            return 0
+
+    df_display = df_pivot.copy()
+    df_display["合計"] = df_display.apply(
+        lambda row: sum(_to_int(v) for v in row), axis=1
+    )
+
+    # 総事業所数メトリクス
+    total_est = df_display["合計"].sum()
+    st.metric("秋田県 総事業所数（民営）", f"{total_est:,} 所")
+
+    st.markdown("#### 産業大分類 × 市町村 事業所数マトリックス")
+
+    # 数値スタイリング: 数値セルにグラデーション、"-" はグレー
+    def _style_cell(val):
+        try:
+            int(val)
+            return ""
+        except Exception:
+            return "color: #aaaaaa; background-color: #f5f5f5;"
+
+    # 数値のみのDataFrameを使ってgradientを計算
+    df_numeric = df_display.map(_to_int)
+
+    styled = (
+        df_display.style
+        .map(_style_cell)
+        .background_gradient(
+            cmap="Blues",
+            gmap=df_numeric,
+            axis=None,
+        )
+        .format(lambda v: v if isinstance(v, str) else f"{v:,}")
+        .set_table_styles([
+            {"selector": "th", "props": [("font-size", "11px"), ("white-space", "nowrap")]},
+            {"selector": "td", "props": [("font-size", "11px"), ("text-align", "right")]},
+        ])
+    )
+
+    st.dataframe(styled, use_container_width=True, height=min(50 + len(df_display) * 35, 700))
+
+    st.caption("「-」は秘匿処理または事業所なし")
+
+    # CSVダウンロード
+    st.download_button(
+        "📥 CSVダウンロード",
+        df_display.to_csv(encoding="utf-8-sig"),
+        "industry_municipal_matrix.csv",
+        mime="text/csv",
+    )
+
+    st.markdown("---")
+
+    # 市区町村別合計棒グラフ（上位10）
+    city_totals: dict[str, int] = {}
+    for col in df_display.columns:
+        if col == "合計":
+            continue
+        city_totals[col] = df_display[col].apply(_to_int).sum()
+
+    top_cities = sorted(city_totals.items(), key=lambda x: x[1], reverse=True)[:10]
+    if top_cities:
+        st.markdown("#### 市区町村別 事業所数（上位10）")
+        fig = go.Figure(go.Bar(
+            x=[c[0] for c in top_cities],
+            y=[c[1] for c in top_cities],
+            marker_color="#1f4e79",
+            text=[f"{c[1]:,}" for c in top_cities],
+            textposition="outside",
+        ))
+        fig.update_layout(
+            height=380,
+            xaxis_title="市区町村",
+            yaxis_title="事業所数（所）",
+            yaxis_tickformat=",",
+            margin=dict(t=20, b=60),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+
 # ルーティング
 # ============================================================
 if page == "📊 総合概要":
@@ -2858,6 +2971,8 @@ elif page == "📋 特定業種支援ガイド":
     page_industry_detail()
 elif page == "📊 業種別生産性分析":
     page_industry_census()
+elif page == "🗺️ 産業×市町村マトリックス":
+    page_industry_matrix()
 elif page == "🗾 東北4県比較":
     page_tohoku()
 elif page == "📈 地域市場シェア分析":

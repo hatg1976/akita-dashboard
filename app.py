@@ -53,8 +53,13 @@ def _load_population_real(area_code: str):
 
 @st.cache_data(ttl=86400)
 def _load_industry_matrix():
-    """産業×市町村マトリックスを取得（24時間キャッシュ）
-    e-Stat API に複数回リクエストするため初回のみ時間がかかる。"""
+    """産業×市町村マトリックスを取得（ローカルJSONキャッシュ優先）
+    毎月1日の GitHub Actions でローカルJSONを更新済みの場合は即座に返す。
+    JSONがない場合のみ e-Stat API から直接取得する（初回・キャッシュ未生成時）。"""
+    df, source = estat_api.load_cached_industry_matrix()
+    if not df.empty:
+        return df, source
+    # ローカルキャッシュがなければ API から直接取得
     return estat_api.fetch_industry_municipal_matrix()
 
 
@@ -2866,7 +2871,7 @@ def page_industry_matrix():
     st.caption("令和3年経済センサス-活動調査に基づく産業大分類別・市町村別の事業所数")
     st.markdown("---")
 
-    with st.spinner("データを読み込み中...（初回のみ時間がかかります）"):
+    with st.spinner("データを読み込み中..."):
         df_pivot, source_note = _load_industry_matrix()
 
     st.caption(source_note)

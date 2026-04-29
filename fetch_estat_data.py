@@ -21,10 +21,55 @@ sys.path.insert(0, str(Path(__file__).parent))
 from dotenv import load_dotenv
 load_dotenv()
 
+import pandas as pd
 from estat_api import fetch_formatted_population_trend, fetch_stats_data, TOHOKU_PREFS
+from estat_api import fetch_industry_municipal_matrix
 
 OUTPUT_DIR = Path(__file__).parent / "data" / "estat_cache"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def fetch_matrix(today: str) -> bool:
+    """産業×市町村マトリックスデータを取得して JSON に保存する"""
+    print("\n--- 産業×市町村マトリックスを取得中 ---")
+    try:
+        df_pivot, source_note = fetch_industry_municipal_matrix()
+        if df_pivot.empty:
+            print("  ⚠ マトリックスデータが空でした（スキップ）")
+            return False
+
+        # DataFrame を JSON シリアライズ可能な形式に変換
+        # 値は int（事業所数）、"-"（秘匿処理）、None（データなし）のいずれか
+        records: dict = {}
+        for industry in df_pivot.index:
+            records[str(industry)] = {}
+            for city in df_pivot.columns:
+                val = df_pivot.loc[industry, city]
+                if isinstance(val, str):
+                    records[str(industry)][str(city)] = val   # "-"
+                elif pd.isna(val):
+                    records[str(industry)][str(city)] = None
+                else:
+                    records[str(industry)][str(city)] = int(val)
+
+        cache = {
+            "fetched_at": today,
+            "source": source_note,
+            "columns": [str(c) for c in df_pivot.columns],
+            "index": [str(i) for i in df_pivot.index],
+            "data": records,
+        }
+        out_path = OUTPUT_DIR / "industry_matrix.json"
+        out_path.write_text(
+            json.dumps(cache, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        print(f"  ✅ 保存完了: {out_path.name}"
+              f"（{len(df_pivot)}産業 × {len(df_pivot.columns)}市区町村）")
+        return True
+    except Exception as e:
+        print(f"  ❌ エラー: {type(e).__name__}: {e}")
+        return False
 
 
 def fetch_all():
@@ -91,6 +136,12 @@ def fetch_all():
         except Exception as e:
             print(f"  ❌ エラー: {type(e).__name__}: {e}")
             errors.append(pref_name)
+
+    # 産業×市町村マトリックスを取得
+    if fetch_matrix(today):
+        fetched.append("産業×市町村マトリックス")
+    else:
+        errors.append("産業×市町村マトリックス")
 
     # マニフェスト（最終更新日・成否サマリー）
     manifest = {

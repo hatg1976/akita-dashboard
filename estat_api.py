@@ -958,6 +958,43 @@ _INDUSTRY_MUNICIPAL_SAMPLE: dict[str, dict[str, int]] = {
 }
 
 
+def load_cached_industry_matrix() -> tuple[pd.DataFrame, str]:
+    """
+    data/estat_cache/industry_matrix.json からキャッシュデータを読み込む
+
+    Returns:
+        (df_pivot, source_label) または (空DataFrame, "") ファイルがない場合
+    """
+    from pathlib import Path
+    import json
+
+    cache_path = (
+        Path(__file__).parent / "data" / "estat_cache" / "industry_matrix.json"
+    )
+    if not cache_path.exists():
+        return pd.DataFrame(), ""
+
+    try:
+        cache = json.loads(cache_path.read_text(encoding="utf-8"))
+        records = cache.get("data", {})
+        columns = cache.get("columns", [])
+        index_order = cache.get("index", list(records.keys()))
+        source = cache.get("source", "令和3年経済センサス-活動調査（2021年）実績値")
+        fetched_at = cache.get("fetched_at", "")
+
+        df = pd.DataFrame(records).T
+        df.index.name = "産業大分類"
+        if columns:
+            df = df.reindex(columns=columns)
+        if index_order:
+            df = df.reindex(index=[i for i in index_order if i in df.index])
+
+        source_label = f"{source}（データ取得日: {fetched_at}）"
+        return df, source_label
+    except Exception:
+        return pd.DataFrame(), ""
+
+
 def fetch_industry_municipal_matrix() -> tuple[pd.DataFrame, str]:
     """
     令和3年経済センサス-活動調査 産業(大分類)×市区町村別 事業所数（秋田県）

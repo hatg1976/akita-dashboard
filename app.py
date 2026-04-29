@@ -2885,20 +2885,31 @@ def page_industry_matrix():
         lambda row: sum(_to_int(v) for v in row), axis=1
     )
 
+    # 縦の合計行（市区町村ごとの産業合計）を追加
+    col_sums = {col: df_display[col].apply(_to_int).sum() for col in df_display.columns}
+    total_row = pd.DataFrame([col_sums], index=["合計"])
+    df_display = pd.concat([df_display, total_row])
+
     # 総事業所数メトリクス
-    total_est = df_display["合計"].sum()
+    total_est = int(col_sums["合計"])
     st.metric("秋田県 総事業所数（民営）", f"{total_est:,} 所")
 
     st.markdown("#### 産業大分類 × 市町村 事業所数マトリックス")
 
-    # "-" セルをグレー表示（background_gradient は matplotlib 不要の map のみ使用）
-    def _style_cell(val):
+    # "-" セルをグレー表示、合計行を太字表示
+    def _style_cell(val, row_label=""):
         if val == "-":
             return "color: #aaaaaa; background-color: #f5f5f5;"
         return ""
 
+    def _style_row(row):
+        if row.name == "合計":
+            return ["font-weight: bold; background-color: #e8f0fe;" for _ in row]
+        return ["" for _ in row]
+
     styled = (
         df_display.style
+        .apply(_style_row, axis=1)
         .map(_style_cell)
         .format(lambda v: v if isinstance(v, str) else f"{v:,}")
         .set_table_styles([

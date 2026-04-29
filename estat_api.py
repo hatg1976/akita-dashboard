@@ -1035,22 +1035,32 @@ def fetch_industry_municipal_matrix() -> tuple[pd.DataFrame, str]:
             return _no_data("api_error")
 
         # 産業・市区町村でピボット
+        # "全産業（S_公務を除く）" のような全産業合計行も除外する
         valid_cats = {
             c: n for c, n in cat01_meta.items()
-            if c not in ("00", "000") and not any(s in n for s in ("合計", "総数"))
+            if c not in ("00", "000") and not any(s in n for s in ("合計", "総数", "全産業"))
         }
 
         rows_pivot: dict[str, dict] = {}
         for ind_code, ind_name in valid_cats.items():
             display = next((c for c in CENSUS_DAIBUNSHU_LIST if c in ind_name or ind_name in c), ind_name)
-            df_ind = df[df["cat01"] == ind_code] if "cat01" in df.columns else pd.DataFrame()
+            df_ind = df[df["cat01"] == ind_code].copy() if "cat01" in df.columns else pd.DataFrame()
             if df_ind.empty:
                 continue
             city_row: dict = {}
-            for _, row in df_ind.iterrows():
-                city = _AKITA_MUNICIPALITIES.get(row.get("area", ""), row.get("area", ""))
-                val = row.get("value")
-                city_row[city] = "-" if (val is None or pd.isna(val) or val == 0) else int(val)
+            # 開設時期・経営組織の合計コード絞り込みが不完全な場合に
+            # 地域ごとに複数行が残ることがある。最大値（合計行が最大になるはず）を採用する
+            if "area" in df_ind.columns:
+                dedup = df_ind.groupby("area", as_index=False)["value"].max()
+                for _, row in dedup.iterrows():
+                    city = _AKITA_MUNICIPALITIES.get(str(row.get("area", "")), str(row.get("area", "")))
+                    val = row.get("value")
+                    city_row[city] = "-" if (val is None or pd.isna(val) or val == 0) else int(val)
+            else:
+                for _, row in df_ind.iterrows():
+                    city = _AKITA_MUNICIPALITIES.get(str(row.get("area", "")), str(row.get("area", "")))
+                    val = row.get("value")
+                    city_row[city] = "-" if (val is None or pd.isna(val) or val == 0) else int(val)
             if city_row:
                 rows_pivot[display] = city_row
 

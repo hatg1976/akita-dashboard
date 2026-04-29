@@ -969,18 +969,11 @@ def fetch_industry_municipal_matrix() -> tuple[pd.DataFrame, str]:
                    "-" for suppressed/missing cells
           source_note: data source description string
     """
-    def _fallback() -> tuple[pd.DataFrame, str]:
-        rows = {}
-        all_cities = list(next(iter(_INDUSTRY_MUNICIPAL_SAMPLE.values())).keys())
-        for ind in CENSUS_DAIBUNSHU_LIST:
-            city_vals = _INDUSTRY_MUNICIPAL_SAMPLE.get(ind, {})
-            rows[ind] = {city: city_vals.get(city, "-") for city in all_cities}
-        df = pd.DataFrame(rows).T
-        df.index.name = "産業大分類"
-        return df, "推計サンプルデータ（令和3年経済センサス-活動調査 参考値）"
+    def _no_data() -> tuple[pd.DataFrame, str]:
+        return pd.DataFrame(), ""
 
     if not is_api_key_set():
-        return _fallback()
+        return _no_data()
 
     try:
         # 表ID: 産業(大分類)、開設時期、経営組織(4区分)別民営事業所数－全国、都道府県、市区町村
@@ -993,7 +986,7 @@ def fetch_industry_municipal_matrix() -> tuple[pd.DataFrame, str]:
         )
 
         if df.empty:
-            return _fallback()
+            return _no_data()
 
         # ---- 次元コードを特定 ----
         # area 次元（市区町村コード）
@@ -1031,7 +1024,7 @@ def fetch_industry_municipal_matrix() -> tuple[pd.DataFrame, str]:
         if "area" in df.columns:
             df_akita = df[df["area"].isin(akita_codes)].copy()
         else:
-            return _fallback()
+            return _no_data()
 
         # ---- 事業所数のみ抽出 ----
         if estab_code and "tab" in df_akita.columns:
@@ -1050,7 +1043,7 @@ def fetch_industry_municipal_matrix() -> tuple[pd.DataFrame, str]:
             df_akita = df_akita[df_akita[cat03_col] == org_total]
 
         if df_akita.empty:
-            return _fallback()
+            return _no_data()
 
         # ---- 産業大分類コードを名称にマッピング ----
         # 合計・総数行を除外
@@ -1089,7 +1082,7 @@ def fetch_industry_municipal_matrix() -> tuple[pd.DataFrame, str]:
                 rows_pivot[display_name] = city_row
 
         if not rows_pivot:
-            return _fallback()
+            return _no_data()
 
         # CENSUS_DAIBUNSHU_LIST の順番で並べる
         ordered_rows = {}
@@ -1119,4 +1112,4 @@ def fetch_industry_municipal_matrix() -> tuple[pd.DataFrame, str]:
         return df_pivot, "令和3年経済センサス-活動調査（2021年）実績値"
 
     except Exception:
-        return _fallback()
+        return _no_data()

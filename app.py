@@ -2865,7 +2865,10 @@ def page_industry_matrix():
     st.caption(source_note)
 
     if df_pivot.empty:
-        st.warning("データを取得できませんでした。")
+        st.info(
+            "データを表示するには e-Stat APIキーの設定が必要です。\n\n"
+            "「🔌 e-Stat API連携」ページでAPIキーを入力してください。"
+        )
         return
 
     # 合計列を追加（数値セルのみ合算、"-" は 0 扱い）

@@ -51,6 +51,13 @@ def _load_population_real(area_code: str):
     return estat_api.fetch_formatted_population_trend(area_code)
 
 
+@st.cache_data(ttl=86400)
+def _load_industry_matrix():
+    """産業×市町村マトリックスを取得（24時間キャッシュ）
+    e-Stat API に複数回リクエストするため初回のみ時間がかかる。"""
+    return estat_api.fetch_industry_municipal_matrix()
+
+
 def _get_population(area_code: str) -> tuple[pd.DataFrame, str, str]:
     """
     人口データを取得する（優先順位: キャッシュ → 実API → サンプル）
@@ -2859,8 +2866,8 @@ def page_industry_matrix():
     st.caption("令和3年経済センサス-活動調査に基づく産業大分類別・市町村別の事業所数")
     st.markdown("---")
 
-    with st.spinner("データを読み込み中..."):
-        df_pivot, source_note = estat_api.fetch_industry_municipal_matrix()
+    with st.spinner("データを読み込み中...（初回のみ時間がかかります）"):
+        df_pivot, source_note = _load_industry_matrix()
 
     st.caption(source_note)
 

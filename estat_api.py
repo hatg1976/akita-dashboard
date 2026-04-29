@@ -969,24 +969,24 @@ def fetch_industry_municipal_matrix() -> tuple[pd.DataFrame, str]:
                    "-" for suppressed/missing cells
           source_note: data source description string
     """
-    def _no_data() -> tuple[pd.DataFrame, str]:
-        return pd.DataFrame(), ""
+    def _no_data(msg: str = "") -> tuple[pd.DataFrame, str]:
+        return pd.DataFrame(), msg
 
     if not is_api_key_set():
-        return _no_data()
+        return _no_data("no_key")
 
     try:
-        # 表ID: 産業(大分類)、開設時期、経営組織(4区分)別民営事業所数－全国、都道府県、市区町村
-        # area_code なし → 秋田県の市区町村データをレスポンス側でフィルタ
+        # 秋田県の全市区町村コードをカンマ区切りで指定
+        akita_codes = ",".join(_AKITA_MUNICIPALITIES.keys())
         df, meta = fetch_stats_data(
             "0004005655",
             area_code=None,
             limit=100000,
-            extra_params={"cdArea": "05"},  # 秋田県プレフィックスで絞り込み
+            extra_params={"cdArea": akita_codes},
         )
 
         if df.empty:
-            return _no_data()
+            return _no_data("api_error")
 
         # ---- 次元コードを特定 ----
         # area 次元（市区町村コード）
@@ -1024,7 +1024,7 @@ def fetch_industry_municipal_matrix() -> tuple[pd.DataFrame, str]:
         if "area" in df.columns:
             df_akita = df[df["area"].isin(akita_codes)].copy()
         else:
-            return _no_data()
+            return _no_data("api_error")
 
         # ---- 事業所数のみ抽出 ----
         if estab_code and "tab" in df_akita.columns:
@@ -1043,7 +1043,7 @@ def fetch_industry_municipal_matrix() -> tuple[pd.DataFrame, str]:
             df_akita = df_akita[df_akita[cat03_col] == org_total]
 
         if df_akita.empty:
-            return _no_data()
+            return _no_data("api_error")
 
         # ---- 産業大分類コードを名称にマッピング ----
         # 合計・総数行を除外
@@ -1082,7 +1082,7 @@ def fetch_industry_municipal_matrix() -> tuple[pd.DataFrame, str]:
                 rows_pivot[display_name] = city_row
 
         if not rows_pivot:
-            return _no_data()
+            return _no_data("api_error")
 
         # CENSUS_DAIBUNSHU_LIST の順番で並べる
         ordered_rows = {}
@@ -1112,4 +1112,4 @@ def fetch_industry_municipal_matrix() -> tuple[pd.DataFrame, str]:
         return df_pivot, "令和3年経済センサス-活動調査（2021年）実績値"
 
     except Exception:
-        return _no_data()
+        return _no_data("api_error")

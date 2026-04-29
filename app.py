@@ -2945,11 +2945,12 @@ def page_industry_matrix():
     st.markdown("---")
 
     # 市区町村別合計棒グラフ（上位10）
-    city_totals: dict[str, int] = {}
-    for col in df_display.columns:
-        if col == "合計":
-            continue
-        city_totals[col] = df_display[col].apply(_to_int).sum()
+    # 「合計」行は各産業の合計なので除外して集計（二重計上を防ぐ）
+    df_industries = df_display.drop(index="合計", errors="ignore")
+    city_totals: dict[str, int] = {
+        col: df_industries[col].apply(_to_int).sum()
+        for col in df_display.columns if col != "合計"
+    }
 
     top_cities = sorted(city_totals.items(), key=lambda x: x[1], reverse=True)[:10]
     if top_cities:

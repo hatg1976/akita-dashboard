@@ -139,7 +139,7 @@ page = st.sidebar.selectbox(
     ["📊 総合概要", "👥 人口動態", "🏭 産業構造", "💰 経済指標",
      "🔎 業種別分析", "📋 特定業種支援ガイド", "📊 業種別生産性分析",
      "🗺️ 産業×市町村マトリックス",
-     "⛓️ バリューチェーン分析",
+     "🔗 川上・川下フロー分析",
      "🗾 東北4県比較", "🏘️ 市町村比較",
      "📈 地域市場シェア分析",
      "💹 決算書図解ツール",
@@ -2974,186 +2974,325 @@ def page_industry_matrix():
 
 
 # ============================================================
-# バリューチェーン分析ページ
+# 川上・川下フロー分析ページ
 # ============================================================
 
-_VALUE_CHAIN_DATA: dict = {
-    "建設業": {
-        "color": "#1565c0",
-        "stages": [
-            {"name": "営業\n受注",   "icon": "📋", "desc": "見積作成・入札・受注契約",          "players": "元請企業・建設会社",         "issues": "価格競争激化・公共工事依存"},
-            {"name": "設計\n計画",   "icon": "📐", "desc": "基本設計・実施設計・施工計画",      "players": "設計事務所・施工会社",         "issues": "設計技術者の不足"},
-            {"name": "資材\n調達",   "icon": "🏗️", "desc": "建材・機材・設備の調達",            "players": "資材商社・リース会社",         "issues": "資材高騰・調達長期化"},
-            {"name": "施工",         "icon": "⚙️", "desc": "工事施工・現場管理・安全管理",      "players": "元請・下請・専門工事業者",     "issues": "職人不足・高齢化・2024年問題"},
-            {"name": "検査\n引渡",   "icon": "✅", "desc": "完工検査・是正対応・引渡し",        "players": "発注者・設計監理・施工者",     "issues": "品質基準の高度化"},
-            {"name": "維持\n管理",   "icon": "🔧", "desc": "定期点検・補修・改修工事",          "players": "維持管理業者・工事会社",       "issues": "インフラ老朽化で需要増"},
+_SUPPLY_CHAIN_DATA: dict = {
+    "🌲 木材・林業": {
+        "color": "#2d6a4f",
+        "layers": [
+            {"label": "① 素材生産\n（川上）", "players": [
+                {"name": "森林所有者",          "desc": "国有林・私有林・公有林"},
+                {"name": "林業家・素材生産業者", "desc": "伐採・造材・集材"},
+                {"name": "輸入業者・原木商",     "desc": "外材輸入・原木流通"},
+            ]},
+            {"label": "② 原木流通", "players": [
+                {"name": "木材市場・原木市場",      "desc": "セリ・入札・相対取引"},
+                {"name": "素材商・原木仲介業者",    "desc": "原木の卸・仲介"},
+                {"name": "輸送・運送業者",          "desc": "山土場→市場→工場"},
+            ]},
+            {"label": "③ 一次加工", "players": [
+                {"name": "製材業者",              "desc": "丸太→板材・角材"},
+                {"name": "合板・集成材メーカー",  "desc": "構造用合板・LVL"},
+                {"name": "チップ・バイオマス業者", "desc": "木質バイオマス燃料"},
+            ]},
+            {"label": "④ 二次加工", "players": [
+                {"name": "木材製品メーカー",    "desc": "フローリング・パネル"},
+                {"name": "家具・建具メーカー",  "desc": "家具・ドア・窓枠"},
+            ]},
+            {"label": "⑤ 流通", "players": [
+                {"name": "木材商社・問屋",          "desc": "卸売・商社"},
+                {"name": "建材店・ホームセンター",  "desc": "小売・販売"},
+            ]},
+            {"label": "⑥ 最終需要\n（川下）", "players": [
+                {"name": "建設業・ゼネコン",  "desc": "建築・土木工事"},
+                {"name": "住宅メーカー",      "desc": "注文・分譲住宅"},
+                {"name": "一般消費者",        "desc": "DIY・インテリア"},
+            ]},
         ],
-        "support": ["🎓 技術者育成（施工管理技士・建築士）", "💻 DX推進（BIM/CIM・ドローン測量）", "🤝 地元サプライチェーン強化", "🛡️ 安全管理・品質管理体制の強化"],
-        "opportunity": "インフラ老朽化対応・リノベーション・防災工事など維持管理分野が拡大。DX化による生産性向上で担い手不足を補える余地がある。",
     },
-    "製造業": {
-        "color": "#2e7d32",
-        "stages": [
-            {"name": "原材料\n調達",  "icon": "🌾", "desc": "原料・素材・部品の調達",          "players": "農家・素材メーカー・商社",     "issues": "価格変動・安定調達"},
-            {"name": "製造\n加工",    "icon": "🏭", "desc": "加工・組立・製造工程",             "players": "製造業者・工場",               "issues": "人手不足・設備老朽化"},
-            {"name": "品質\n管理",    "icon": "🔍", "desc": "検査・品質保証・規格対応",         "players": "品質管理部門・検査機関",       "issues": "基準の高度化・コスト増"},
-            {"name": "包装\n在庫",    "icon": "📦", "desc": "包装・梱包・在庫管理",             "players": "包装業者・物流業者",           "issues": "資材コスト上昇"},
-            {"name": "流通\n物流",    "icon": "🚚", "desc": "輸送・配送・物流管理",             "players": "物流会社・運送業者",           "issues": "ドライバー不足・2024年問題"},
-            {"name": "販売\nPR",      "icon": "🛒", "desc": "営業・マーケティング・販路開拓",   "players": "営業部門・EC事業者",           "issues": "県外・海外への情報発信力"},
+    "🌾 農業・食品加工": {
+        "color": "#558b2f",
+        "layers": [
+            {"label": "① 農業生産\n（川上）", "players": [
+                {"name": "農家（個人・法人）",  "desc": "米・野菜・果物・畜産"},
+                {"name": "JA（農協）",          "desc": "営農指導・資材供給"},
+                {"name": "農業資材業者",        "desc": "肥料・農薬・機械"},
+            ]},
+            {"label": "② 集荷・選別", "players": [
+                {"name": "JA集荷施設・カントリーエレベーター", "desc": "集荷・乾燥・調製・保管"},
+                {"name": "農産物卸売市場",      "desc": "セリ・相対取引"},
+                {"name": "産直・直売所",        "desc": "道の駅・産直市場"},
+            ]},
+            {"label": "③ 食品加工", "players": [
+                {"name": "食品加工業者",        "desc": "米菓・冷凍食品等"},
+                {"name": "漬物・味噌・酒造業者","desc": "発酵食品・日本酒"},
+                {"name": "冷凍・冷蔵加工業者",  "desc": "業務用食品加工"},
+            ]},
+            {"label": "④ 食品流通", "players": [
+                {"name": "食品卸売業者",    "desc": "食品商社・問屋"},
+                {"name": "物流・配送業者",  "desc": "低温物流・宅配"},
+            ]},
+            {"label": "⑤ 販売\n（川下）", "players": [
+                {"name": "スーパー・量販店",    "desc": "小売・地元産品コーナー"},
+                {"name": "飲食店・給食",        "desc": "外食・学校給食"},
+                {"name": "EC・通販・輸出",      "desc": "ふるさと納税・海外展開"},
+            ]},
         ],
-        "support": ["🎓 技術者・熟練工の育成確保", "💻 スマートファクトリー化（IoT・AI）", "🌏 販路開拓（県外・海外展開）", "🌱 環境配慮型製造（SDGs対応）"],
-        "opportunity": "秋田の農産品（米・野菜・果物）を活かした食品製造は6次産業化と連携した成長余地が大きい。県外・海外への販路拡大がカギ。",
     },
-    "卸売業・小売業": {
-        "color": "#e65100",
-        "stages": [
-            {"name": "仕入\n計画",    "icon": "📊", "desc": "需要予測・仕入計画・発注",         "players": "バイヤー・MD担当",             "issues": "需要予測の精度向上"},
-            {"name": "仕入\n調達",    "icon": "🤝", "desc": "メーカー・産地との商談・調達",     "players": "卸売業者・商社・産地",         "issues": "取引先集約・価格交渉力"},
-            {"name": "物流\n保管",    "icon": "🏪", "desc": "入荷・検品・在庫管理・配送",       "players": "物流センター・配送業者",       "issues": "物流コスト増・省人化"},
-            {"name": "販売\nサービス","icon": "🛍️", "desc": "接客・販売・顧客サービス",         "players": "小売店舗・EC",                 "issues": "人手不足・EC競合激化"},
-            {"name": "顧客\n管理",    "icon": "👥", "desc": "CRM・リピーター獲得・コミュニティ","players": "マーケ担当・店舗スタッフ",     "issues": "人口減少で顧客数縮小"},
-            {"name": "データ\n分析",  "icon": "📈", "desc": "販売データ分析・需要予測・改善",   "players": "DX担当・経営者",               "issues": "デジタル化対応の遅れ"},
+    "🏔️ 観光・宿泊": {
+        "color": "#00695c",
+        "layers": [
+            {"label": "① 観光資源\n（川上）", "players": [
+                {"name": "自然資源",            "desc": "山・温泉・雪・ラムサール"},
+                {"name": "文化・歴史資産",      "desc": "祭り・伝統工芸・城址"},
+                {"name": "農村・食文化",        "desc": "農家体験・きりたんぽ等"},
+            ]},
+            {"label": "② 体験・コンテンツ", "players": [
+                {"name": "体験事業者・ガイド",  "desc": "アウトドア・農業体験"},
+                {"name": "祭り・イベント主催",  "desc": "なまはげ・竿燈まつり"},
+                {"name": "DMO・観光協会",       "desc": "広域観光マネジメント"},
+            ]},
+            {"label": "③ 宿泊", "players": [
+                {"name": "ホテル・旅館",            "desc": "温泉旅館・シティホテル"},
+                {"name": "民宿・民泊・グランピング","desc": "農家民宿・体験型宿泊"},
+            ]},
+            {"label": "④ 飲食・土産", "players": [
+                {"name": "飲食店・居酒屋",      "desc": "郷土料理・地酒"},
+                {"name": "土産物店・物産館",    "desc": "空港・道の駅・駅構内"},
+            ]},
+            {"label": "⑤ 交通・手配\n（川下）", "players": [
+                {"name": "航空・新幹線",        "desc": "秋田空港・秋田新幹線"},
+                {"name": "バス・タクシー・レンタカー","desc": "二次交通・観光周遊"},
+                {"name": "旅行会社・OTA",       "desc": "楽天・じゃらん・HIS"},
+            ]},
         ],
-        "support": ["💻 DX化（POSデータ活用・EC構築）", "🚚 共同配送・物流効率化", "🌱 地産地消・地元産品の取扱拡大", "👥 接客スタッフの育成・定着"],
-        "opportunity": "人口減少下でもECや観光客向け販売で新たな需要を創出できる。地元産品のブランディングと組み合わせた付加価値販売が有効。",
     },
-    "宿泊業・飲食サービス業": {
+    "🪨 砕石・建材": {
+        "color": "#4e342e",
+        "layers": [
+            {"label": "① 採掘\n（川上）", "players": [
+                {"name": "採石場・砕石業者",    "desc": "山岳・岩石採掘"},
+                {"name": "砂利採取業者",        "desc": "河川・海浜砂利採取"},
+                {"name": "砂採取業者",          "desc": "河砂・山砂採取"},
+            ]},
+            {"label": "② 一次製造", "players": [
+                {"name": "砕石・砂利製造業者",  "desc": "破砕・篩い分け・粒調整"},
+                {"name": "砂製造業者",          "desc": "洗砂・乾燥砂"},
+            ]},
+            {"label": "③ 二次製造", "players": [
+                {"name": "生コンクリート製造業者",    "desc": "レディーミクストコンクリート"},
+                {"name": "アスファルト合材製造業者",  "desc": "道路舗装用合材"},
+                {"name": "セメント製品製造業者",      "desc": "ブロック・管・パイル"},
+            ]},
+            {"label": "④ 流通", "players": [
+                {"name": "建材卸売業者",    "desc": "建材・資材商社"},
+                {"name": "輸送・運送業者",  "desc": "ミキサー車・ダンプ"},
+            ]},
+            {"label": "⑤ 最終需要\n（川下）", "players": [
+                {"name": "建設業・土木業者",    "desc": "一般土木・地盤改良"},
+                {"name": "道路舗装業者",        "desc": "国道・県道・農道整備"},
+                {"name": "建築業者",            "desc": "住宅・非住宅建築"},
+            ]},
+        ],
+    },
+    "🧵 縫製": {
         "color": "#6a1b9a",
-        "stages": [
-            {"name": "集客\nPR",      "icon": "📣", "desc": "広告・SNS・OTA・旅行会社連携",     "players": "宿泊施設・飲食店",             "issues": "デジタルマーケ対応"},
-            {"name": "予約\n受付",    "icon": "📅", "desc": "予約管理・問合せ対応・確認",       "players": "フロント・予約システム",       "issues": "人手不足・システム費用"},
-            {"name": "受入\n準備",    "icon": "🛎️", "desc": "食材調達・客室準備・仕込み",       "players": "調理スタッフ・仲居",           "issues": "食材コスト増・調達安定性"},
-            {"name": "サービス\n提供","icon": "⭐", "desc": "接客・料理提供・体験プログラム",   "players": "全スタッフ",                   "issues": "スタッフ不足・品質維持"},
-            {"name": "精算\nフォロー","icon": "💳", "desc": "精算・口コミ促進・リピーター獲得", "players": "フロント・マーケ",             "issues": "客単価向上・リピート率"},
-            {"name": "地域\n連携",    "icon": "🤝", "desc": "観光資源・体験・地域との協力",     "players": "DMO・地域事業者",              "issues": "コンテンツ不足・連携不足"},
+        "layers": [
+            {"label": "① 素材調達\n（川上）", "players": [
+                {"name": "繊維・糸メーカー",    "desc": "綿・ポリ・ウール等"},
+                {"name": "生地・織物業者",      "desc": "機屋・ニット・染色"},
+                {"name": "副資材業者",          "desc": "ボタン・ファスナー・芯地"},
+            ]},
+            {"label": "② 企画・デザイン", "players": [
+                {"name": "アパレルブランド・企画会社","desc": "MD・企画・デザイン"},
+                {"name": "パターンメーカー",    "desc": "型紙作成・グレーディング"},
+                {"name": "刺繍・プリント業者",  "desc": "加工・装飾・ネーム"},
+            ]},
+            {"label": "③ 縫製加工", "players": [
+                {"name": "縫製工場（OEM・ODM）","desc": "裁断・縫製・仕上げ"},
+                {"name": "検品・品質管理業者",  "desc": "検品・補修・荷造り"},
+            ]},
+            {"label": "④ 流通", "players": [
+                {"name": "アパレル卸売業者",    "desc": "問屋・商社"},
+                {"name": "物流・配送業者",      "desc": "アパレル物流センター"},
+            ]},
+            {"label": "⑤ 販売\n（川下）", "players": [
+                {"name": "アパレル小売・百貨店","desc": "専門店・量販店・SC"},
+                {"name": "EC・通販",            "desc": "ZOZOTOWN・自社EC"},
+                {"name": "法人向け（ユニフォーム）","desc": "作業服・医療・学校"},
+            ]},
         ],
-        "support": ["🎓 おもてなし・多言語対応スタッフ育成", "💻 DX化（予約システム・セルフチェックイン）", "🌏 インバウンド対応（外国語・決済・文化対応）", "🌿 温泉・自然・食など秋田固有の価値の磨き上げ"],
-        "opportunity": "秋田は温泉・自然・食文化など観光資源が豊富。インバウンド回復と秘境ブームを活かした高付加価値化・体験型観光が成長チャンス。",
     },
-    "医療・福祉": {
-        "color": "#c62828",
-        "stages": [
-            {"name": "予防\n健康増進", "icon": "💪", "desc": "健診・予防接種・健康教育",        "players": "行政・保健所・診療所",         "issues": "受診率向上・予防意識醸成"},
-            {"name": "受診\n診断",     "icon": "🏥", "desc": "外来受診・検査・診断",             "players": "病院・クリニック",             "issues": "医師・看護師不足・偏在"},
-            {"name": "治療\n入院",     "icon": "💊", "desc": "治療・手術・入院管理",             "players": "急性期病院・専門医",           "issues": "医療過疎・移動距離の問題"},
-            {"name": "回復\nリハビリ", "icon": "🏃", "desc": "リハビリ・回復期病棟・通所リハ",  "players": "リハビリ専門職・施設",         "issues": "セラピスト不足"},
-            {"name": "在宅\n介護",    "icon": "🏠", "desc": "訪問介護・デイサービス・施設介護", "players": "介護事業者・ヘルパー",         "issues": "介護人材不足・処遇改善"},
-            {"name": "看取り\n終末期", "icon": "🌸", "desc": "緩和ケア・看取り・家族支援",      "players": "在宅医・ホスピス・家族",       "issues": "在宅看取り体制の整備"},
+    "🚗 自動車": {
+        "color": "#1565c0",
+        "layers": [
+            {"label": "① 製造・輸入\n（川上）", "players": [
+                {"name": "自動車メーカー",          "desc": "トヨタ・ホンダ等"},
+                {"name": "部品メーカー（Tier1・2）", "desc": "エンジン・電装・内装部品"},
+                {"name": "輸入車ディーラー本部",    "desc": "輸入・配分・サポート"},
+            ]},
+            {"label": "② 新車販売", "players": [
+                {"name": "正規ディーラー",  "desc": "新車販売・試乗・商談"},
+                {"name": "地域販売店",      "desc": "系列外・独立系"},
+            ]},
+            {"label": "③ 中古車流通", "players": [
+                {"name": "中古車販売店",                    "desc": "買取・販売・展示"},
+                {"name": "自動車オークション（USS等）",     "desc": "業者間取引・価格形成"},
+            ]},
+            {"label": "④ 整備・修理・用品", "players": [
+                {"name": "自動車整備業者",      "desc": "車検・定期点検・修理"},
+                {"name": "板金・塗装業者",      "desc": "事故修理・外装補修"},
+                {"name": "カー用品店・GSS",     "desc": "タイヤ・オイル・用品"},
+            ]},
+            {"label": "⑤ 解体・リサイクル\n（川下）", "players": [
+                {"name": "解体業者・廃車業者",      "desc": "使用済自動車解体処理"},
+                {"name": "中古部品販売（ヤード）",  "desc": "リユース部品・輸出"},
+                {"name": "自動車リサイクル業者",    "desc": "金属・樹脂・フロン回収"},
+            ]},
         ],
-        "support": ["🎓 医療・介護人材の育成・定着（処遇改善・奨学金）", "💻 デジタル医療（オンライン診療・AI診断・電子カルテ）", "🤝 地域包括ケアシステムの強化", "🚗 移動手段確保（医療過疎地への交通支援）"],
-        "opportunity": "高齢化が最も進む秋田では医療・介護需要が急増。予防医療・ICT活用・地域包括ケアの充実が高齢者QOLと産業振興を両立させる。",
     },
 }
 
 
-def _draw_value_chain_fig(stages: list, base_color: str) -> go.Figure:
-    """バリューチェーン図を Plotly で描画する。
-    各ステージを x 軸 [i, i+1] のスロットに配置するデータ座標系を使用。
-    axref='paper' は Plotly で無効なため axref='x'/ayref='y' を使用する。"""
-    n = len(stages)
-    margin = 0.07   # ボックスの左右マージン（スロット内）
-    y_lo, y_hi, yc = 0.08, 0.92, 0.5
+def _draw_supply_chain_fig(chain_data: dict) -> go.Figure:
+    """川上→川下 縦型フロー図を Plotly で描画する。
+    y 軸を反転（range=[n, 0]）し、layer 0 が最上段（川上）になるよう配置。
+    axref='x'/ayref='y' でデータ座標系の矢印を描画する。"""
+    layers = chain_data["layers"]
+    base_color = chain_data["color"]
+    n_layers = len(layers)
+    max_players = max(len(layer["players"]) for layer in layers)
 
+    label_w = 1.5       # 左側ラベル列の幅（x座標単位）
+    gap_lr = 0.12       # ラベル列とボックス列の隙間
+    margin_x = 0.08    # ボックス左右マージン
+    margin_y = 0.13    # ボックス上下マージン
+
+    # カラーグラデーション（川上=ベース色、川下=やや明るい）
     r0, g0, b0 = int(base_color[1:3], 16), int(base_color[3:5], 16), int(base_color[5:7], 16)
-    def _lighten(r, g, b, step):
-        f = 1 + step * 0.10
-        return f"rgb({min(255,int(r*f))},{min(255,int(g*f))},{min(255,int(b*f))})"
-    stage_colors = [_lighten(r0, g0, b0, i) for i in range(n)]
+    def _lighten(step):
+        f = 1 + (step / max(n_layers - 1, 1)) * 0.4
+        return f"rgb({min(255, int(r0 * f))},{min(255, int(g0 * f))},{min(255, int(b0 * f))})"
+    layer_colors = [_lighten(i) for i in range(n_layers)]
 
     fig = go.Figure()
-    # 座標系を確立するための不可視トレース
+    # 座標系確立のための不可視トレース
     fig.add_trace(go.Scatter(
-        x=[0, n], y=[0, 1], mode="markers",
-        marker=dict(opacity=0, size=1),
+        x=[-(label_w + gap_lr), max_players], y=[0, n_layers],
+        mode="markers", marker=dict(opacity=0, size=1),
         showlegend=False, hoverinfo="none",
     ))
 
-    for i, stage in enumerate(stages):
-        x0 = i + margin
-        x1 = i + 1 - margin
-        xc = i + 0.5
+    for i, layer in enumerate(layers):
+        yc = i + 0.5
+        y0 = i + margin_y
+        y1 = i + 1 - margin_y
+        n_players = len(layer["players"])
+        col = layer_colors[i]
 
-        # ボックス（データ座標）
+        # ── 左側ラベルボックス ───────────────────────────
         fig.add_shape(
             type="rect", xref="x", yref="y",
-            x0=x0, x1=x1, y0=y_lo, y1=y_hi,
-            fillcolor=stage_colors[i],
-            line=dict(color="white", width=2),
+            x0=-(label_w + gap_lr), x1=-gap_lr,
+            y0=y0, y1=y1,
+            fillcolor=col, opacity=0.9,
+            line=dict(color="white", width=1),
         )
-        # アイコン
         fig.add_annotation(
             xref="x", yref="y",
-            x=xc, y=0.73, text=stage["icon"],
-            showarrow=False, font=dict(size=22),
-        )
-        # ステージ名
-        fig.add_annotation(
-            xref="x", yref="y",
-            x=xc, y=0.28,
-            text=f"<b>{stage['name'].replace(chr(10), '<br>')}</b>",
+            x=-(label_w / 2 + gap_lr), y=yc,
+            text=layer["label"].replace("\n", "<br>"),
             showarrow=False,
-            font=dict(color="white", size=10),
+            font=dict(color="white", size=9, family="sans-serif"),
             align="center",
         )
-        # 次のボックスへの矢印（axref='x' はデータ座標として有効）
-        if i < n - 1:
+
+        # ── プレイヤーボックス ───────────────────────────
+        offset = (max_players - n_players) / 2
+        for j, player in enumerate(layer["players"]):
+            px0 = j + offset + margin_x
+            px1 = j + offset + 1 - margin_x
+            pxc = j + offset + 0.5
+            fig.add_shape(
+                type="rect", xref="x", yref="y",
+                x0=px0, x1=px1, y0=y0, y1=y1,
+                fillcolor=col,
+                line=dict(color="white", width=2),
+            )
+            fig.add_annotation(
+                xref="x", yref="y",
+                x=pxc, y=yc - 0.13,
+                text=f"<b>{player['name']}</b>",
+                showarrow=False,
+                font=dict(color="white", size=10),
+                align="center",
+            )
+            fig.add_annotation(
+                xref="x", yref="y",
+                x=pxc, y=yc + 0.18,
+                text=player["desc"],
+                showarrow=False,
+                font=dict(color="rgba(255,255,255,0.88)", size=8),
+                align="center",
+            )
+
+        # ── 次レイヤーへの下向き矢印 ─────────────────────
+        if i < n_layers - 1:
+            arr_x = max_players / 2
             fig.add_annotation(
                 xref="x", yref="y", axref="x", ayref="y",
-                x=i + 1 + margin, y=yc,   # 矢印の先端（次ボックス左端）
-                ax=i + 1 - margin, ay=yc, # 矢印の根元（現ボックス右端）
-                arrowhead=2, arrowsize=1.2,
-                arrowwidth=3, arrowcolor="#bdbdbd",
-                showarrow=True,
+                x=arr_x, y=i + 1 + margin_y,      # 矢印先端（次レイヤー上端）
+                ax=arr_x, ay=i + 1 - margin_y,    # 矢印根元（現レイヤー下端）
+                arrowhead=3, arrowsize=1.4,
+                arrowwidth=3, arrowcolor="#90a4ae",
+                showarrow=True, text="",
             )
 
     fig.update_layout(
-        height=165,
-        margin=dict(l=0, r=0, t=4, b=4),
-        xaxis=dict(visible=False, range=[-0.05, n + 0.05]),
-        yaxis=dict(visible=False, range=[0, 1]),
+        height=max(380, n_layers * 115),
+        margin=dict(l=5, r=5, t=8, b=8),
+        xaxis=dict(visible=False, range=[-(label_w + gap_lr + 0.1), max_players + 0.1]),
+        yaxis=dict(visible=False, range=[n_layers, 0]),  # 反転: 川上が上
         plot_bgcolor="white", paper_bgcolor="white",
         showlegend=False,
     )
     return fig
 
 
-def page_value_chain():
-    st.title("⛓️ バリューチェーン分析")
-    st.caption("業界別の価値創造プロセスと秋田県における課題・機会を分析します")
+def page_supply_chain():
+    st.title("🔗 川上・川下フロー分析")
+    st.caption("業界別の原材料から最終消費までの川上・川下関係を図示します")
     st.markdown("---")
 
-    selected = st.selectbox("業界を選択", list(_VALUE_CHAIN_DATA.keys()))
-    vc = _VALUE_CHAIN_DATA[selected]
-    stages = vc["stages"]
+    selected = st.selectbox("業界を選択", list(_SUPPLY_CHAIN_DATA.keys()))
+    chain = _SUPPLY_CHAIN_DATA[selected]
 
-    # ── バリューチェーン図 ─────────────────────────────────────
     st.plotly_chart(
-        _draw_value_chain_fig(stages, vc["color"]),
+        _draw_supply_chain_fig(chain),
         use_container_width=True,
     )
 
-    # ── 各ステージ詳細 ─────────────────────────────────────────
-    st.markdown("##### 各ステージの詳細")
-    cols = st.columns(len(stages))
-    for col, stage in zip(cols, stages):
-        with col:
-            name = stage["name"].replace("\n", " ")
-            st.markdown(f"**{stage['icon']} {name}**")
-            st.caption(stage["desc"])
-            st.markdown(f"<small>👥 {stage['players']}</small>", unsafe_allow_html=True)
-            st.markdown(f"<small style='color:#e53935'>⚠️ {stage['issues']}</small>", unsafe_allow_html=True)
+    # 凡例説明
+    n = len(chain["layers"])
+    with st.expander("📋 各プレイヤーの詳細", expanded=False):
+        for layer in chain["layers"]:
+            st.markdown(f"**{layer['label'].replace(chr(10), ' ')}**")
+            cols = st.columns(len(layer["players"]))
+            for col, p in zip(cols, layer["players"]):
+                with col:
+                    st.markdown(f"**{p['name']}**")
+                    st.caption(p["desc"])
+            st.markdown("---")
 
-    st.markdown("---")
 
-    # ── サポート活動 & 機会 ────────────────────────────────────
-    col_l, col_r = st.columns(2)
-    with col_l:
-        st.markdown("#### 🔧 サポート活動")
-        for s in vc["support"]:
-            st.markdown(f"- {s}")
-    with col_r:
-        st.markdown("#### 💡 秋田県における機会")
-        st.info(vc["opportunity"])
+# ダミー: 旧関数名を残して routing エラーを防ぐ（下部 routing で置き換え済み）
+def page_value_chain():
+    page_supply_chain()
+
+
+_VALUE_CHAIN_DATA: dict = {}   # 旧データ（未使用・互換性維持）
+
 
 
 # ルーティング
@@ -3176,8 +3315,8 @@ elif page == "📊 業種別生産性分析":
     page_industry_census()
 elif page == "🗺️ 産業×市町村マトリックス":
     page_industry_matrix()
-elif page == "⛓️ バリューチェーン分析":
-    page_value_chain()
+elif page == "🔗 川上・川下フロー分析":
+    page_supply_chain()
 elif page == "🗾 東北4県比較":
     page_tohoku()
 elif page == "📈 地域市場シェア分析":

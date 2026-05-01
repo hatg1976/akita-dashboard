@@ -3047,12 +3047,13 @@ _VALUE_CHAIN_DATA: dict = {
 
 
 def _draw_value_chain_fig(stages: list, base_color: str) -> go.Figure:
-    """バリューチェーン図を Plotly で描画する"""
+    """バリューチェーン図を Plotly で描画する。
+    各ステージを x 軸 [i, i+1] のスロットに配置するデータ座標系を使用。
+    axref='paper' は Plotly で無効なため axref='x'/ayref='y' を使用する。"""
     n = len(stages)
-    gap = 0.018          # ボックス間の隙間（paper 座標）
-    box_w = (1.0 - gap * (n - 1)) / n
+    margin = 0.07   # ボックスの左右マージン（スロット内）
+    y_lo, y_hi, yc = 0.08, 0.92, 0.5
 
-    # ベースカラーを段階的に明るくしたグラデーション
     r0, g0, b0 = int(base_color[1:3], 16), int(base_color[3:5], 16), int(base_color[5:7], 16)
     def _lighten(r, g, b, step):
         f = 1 + step * 0.10
@@ -3060,49 +3061,55 @@ def _draw_value_chain_fig(stages: list, base_color: str) -> go.Figure:
     stage_colors = [_lighten(r0, g0, b0, i) for i in range(n)]
 
     fig = go.Figure()
+    # 座標系を確立するための不可視トレース
+    fig.add_trace(go.Scatter(
+        x=[0, n], y=[0, 1], mode="markers",
+        marker=dict(opacity=0, size=1),
+        showlegend=False, hoverinfo="none",
+    ))
 
     for i, stage in enumerate(stages):
-        x0 = i * (box_w + gap)
-        x1 = x0 + box_w
-        xc = (x0 + x1) / 2
+        x0 = i + margin
+        x1 = i + 1 - margin
+        xc = i + 0.5
 
-        # ボックス
+        # ボックス（データ座標）
         fig.add_shape(
-            type="rect", xref="paper", yref="paper",
-            x0=x0, x1=x1, y0=0.05, y1=0.95,
+            type="rect", xref="x", yref="y",
+            x0=x0, x1=x1, y0=y_lo, y1=y_hi,
             fillcolor=stage_colors[i],
             line=dict(color="white", width=2),
         )
         # アイコン
         fig.add_annotation(
-            xref="paper", yref="paper",
+            xref="x", yref="y",
             x=xc, y=0.73, text=stage["icon"],
             showarrow=False, font=dict(size=22),
         )
         # ステージ名
         fig.add_annotation(
-            xref="paper", yref="paper",
+            xref="x", yref="y",
             x=xc, y=0.28,
             text=f"<b>{stage['name'].replace(chr(10), '<br>')}</b>",
             showarrow=False,
             font=dict(color="white", size=10),
             align="center",
         )
-        # 次のボックスへの矢印
+        # 次のボックスへの矢印（axref='x' はデータ座標として有効）
         if i < n - 1:
             fig.add_annotation(
-                xref="paper", yref="paper",
-                axref="paper", ayref="paper",
-                x=x1 + gap, y=0.5,
-                ax=x1, ay=0.5,
+                xref="x", yref="y", axref="x", ayref="y",
+                x=i + 1 + margin, y=yc,   # 矢印の先端（次ボックス左端）
+                ax=i + 1 - margin, ay=yc, # 矢印の根元（現ボックス右端）
                 arrowhead=2, arrowsize=1.2,
                 arrowwidth=3, arrowcolor="#bdbdbd",
+                showarrow=True,
             )
 
     fig.update_layout(
         height=165,
         margin=dict(l=0, r=0, t=4, b=4),
-        xaxis=dict(visible=False, range=[0, 1]),
+        xaxis=dict(visible=False, range=[-0.05, n + 0.05]),
         yaxis=dict(visible=False, range=[0, 1]),
         plot_bgcolor="white", paper_bgcolor="white",
         showlegend=False,

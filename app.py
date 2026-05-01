@@ -139,6 +139,7 @@ page = st.sidebar.selectbox(
     ["📊 総合概要", "👥 人口動態", "🏭 産業構造", "💰 経済指標",
      "🔎 業種別分析", "📋 特定業種支援ガイド", "📊 業種別生産性分析",
      "🗺️ 産業×市町村マトリックス",
+     "⛓️ バリューチェーン分析",
      "🗾 東北4県比較", "🏘️ 市町村比較",
      "📈 地域市場シェア分析",
      "💹 決算書図解ツール",
@@ -2972,6 +2973,182 @@ def page_industry_matrix():
         st.plotly_chart(fig, use_container_width=True)
 
 
+# ============================================================
+# バリューチェーン分析ページ
+# ============================================================
+
+_VALUE_CHAIN_DATA: dict = {
+    "建設業": {
+        "color": "#1565c0",
+        "stages": [
+            {"name": "営業\n受注",   "icon": "📋", "desc": "見積作成・入札・受注契約",          "players": "元請企業・建設会社",         "issues": "価格競争激化・公共工事依存"},
+            {"name": "設計\n計画",   "icon": "📐", "desc": "基本設計・実施設計・施工計画",      "players": "設計事務所・施工会社",         "issues": "設計技術者の不足"},
+            {"name": "資材\n調達",   "icon": "🏗️", "desc": "建材・機材・設備の調達",            "players": "資材商社・リース会社",         "issues": "資材高騰・調達長期化"},
+            {"name": "施工",         "icon": "⚙️", "desc": "工事施工・現場管理・安全管理",      "players": "元請・下請・専門工事業者",     "issues": "職人不足・高齢化・2024年問題"},
+            {"name": "検査\n引渡",   "icon": "✅", "desc": "完工検査・是正対応・引渡し",        "players": "発注者・設計監理・施工者",     "issues": "品質基準の高度化"},
+            {"name": "維持\n管理",   "icon": "🔧", "desc": "定期点検・補修・改修工事",          "players": "維持管理業者・工事会社",       "issues": "インフラ老朽化で需要増"},
+        ],
+        "support": ["🎓 技術者育成（施工管理技士・建築士）", "💻 DX推進（BIM/CIM・ドローン測量）", "🤝 地元サプライチェーン強化", "🛡️ 安全管理・品質管理体制の強化"],
+        "opportunity": "インフラ老朽化対応・リノベーション・防災工事など維持管理分野が拡大。DX化による生産性向上で担い手不足を補える余地がある。",
+    },
+    "製造業": {
+        "color": "#2e7d32",
+        "stages": [
+            {"name": "原材料\n調達",  "icon": "🌾", "desc": "原料・素材・部品の調達",          "players": "農家・素材メーカー・商社",     "issues": "価格変動・安定調達"},
+            {"name": "製造\n加工",    "icon": "🏭", "desc": "加工・組立・製造工程",             "players": "製造業者・工場",               "issues": "人手不足・設備老朽化"},
+            {"name": "品質\n管理",    "icon": "🔍", "desc": "検査・品質保証・規格対応",         "players": "品質管理部門・検査機関",       "issues": "基準の高度化・コスト増"},
+            {"name": "包装\n在庫",    "icon": "📦", "desc": "包装・梱包・在庫管理",             "players": "包装業者・物流業者",           "issues": "資材コスト上昇"},
+            {"name": "流通\n物流",    "icon": "🚚", "desc": "輸送・配送・物流管理",             "players": "物流会社・運送業者",           "issues": "ドライバー不足・2024年問題"},
+            {"name": "販売\nPR",      "icon": "🛒", "desc": "営業・マーケティング・販路開拓",   "players": "営業部門・EC事業者",           "issues": "県外・海外への情報発信力"},
+        ],
+        "support": ["🎓 技術者・熟練工の育成確保", "💻 スマートファクトリー化（IoT・AI）", "🌏 販路開拓（県外・海外展開）", "🌱 環境配慮型製造（SDGs対応）"],
+        "opportunity": "秋田の農産品（米・野菜・果物）を活かした食品製造は6次産業化と連携した成長余地が大きい。県外・海外への販路拡大がカギ。",
+    },
+    "卸売業・小売業": {
+        "color": "#e65100",
+        "stages": [
+            {"name": "仕入\n計画",    "icon": "📊", "desc": "需要予測・仕入計画・発注",         "players": "バイヤー・MD担当",             "issues": "需要予測の精度向上"},
+            {"name": "仕入\n調達",    "icon": "🤝", "desc": "メーカー・産地との商談・調達",     "players": "卸売業者・商社・産地",         "issues": "取引先集約・価格交渉力"},
+            {"name": "物流\n保管",    "icon": "🏪", "desc": "入荷・検品・在庫管理・配送",       "players": "物流センター・配送業者",       "issues": "物流コスト増・省人化"},
+            {"name": "販売\nサービス","icon": "🛍️", "desc": "接客・販売・顧客サービス",         "players": "小売店舗・EC",                 "issues": "人手不足・EC競合激化"},
+            {"name": "顧客\n管理",    "icon": "👥", "desc": "CRM・リピーター獲得・コミュニティ","players": "マーケ担当・店舗スタッフ",     "issues": "人口減少で顧客数縮小"},
+            {"name": "データ\n分析",  "icon": "📈", "desc": "販売データ分析・需要予測・改善",   "players": "DX担当・経営者",               "issues": "デジタル化対応の遅れ"},
+        ],
+        "support": ["💻 DX化（POSデータ活用・EC構築）", "🚚 共同配送・物流効率化", "🌱 地産地消・地元産品の取扱拡大", "👥 接客スタッフの育成・定着"],
+        "opportunity": "人口減少下でもECや観光客向け販売で新たな需要を創出できる。地元産品のブランディングと組み合わせた付加価値販売が有効。",
+    },
+    "宿泊業・飲食サービス業": {
+        "color": "#6a1b9a",
+        "stages": [
+            {"name": "集客\nPR",      "icon": "📣", "desc": "広告・SNS・OTA・旅行会社連携",     "players": "宿泊施設・飲食店",             "issues": "デジタルマーケ対応"},
+            {"name": "予約\n受付",    "icon": "📅", "desc": "予約管理・問合せ対応・確認",       "players": "フロント・予約システム",       "issues": "人手不足・システム費用"},
+            {"name": "受入\n準備",    "icon": "🛎️", "desc": "食材調達・客室準備・仕込み",       "players": "調理スタッフ・仲居",           "issues": "食材コスト増・調達安定性"},
+            {"name": "サービス\n提供","icon": "⭐", "desc": "接客・料理提供・体験プログラム",   "players": "全スタッフ",                   "issues": "スタッフ不足・品質維持"},
+            {"name": "精算\nフォロー","icon": "💳", "desc": "精算・口コミ促進・リピーター獲得", "players": "フロント・マーケ",             "issues": "客単価向上・リピート率"},
+            {"name": "地域\n連携",    "icon": "🤝", "desc": "観光資源・体験・地域との協力",     "players": "DMO・地域事業者",              "issues": "コンテンツ不足・連携不足"},
+        ],
+        "support": ["🎓 おもてなし・多言語対応スタッフ育成", "💻 DX化（予約システム・セルフチェックイン）", "🌏 インバウンド対応（外国語・決済・文化対応）", "🌿 温泉・自然・食など秋田固有の価値の磨き上げ"],
+        "opportunity": "秋田は温泉・自然・食文化など観光資源が豊富。インバウンド回復と秘境ブームを活かした高付加価値化・体験型観光が成長チャンス。",
+    },
+    "医療・福祉": {
+        "color": "#c62828",
+        "stages": [
+            {"name": "予防\n健康増進", "icon": "💪", "desc": "健診・予防接種・健康教育",        "players": "行政・保健所・診療所",         "issues": "受診率向上・予防意識醸成"},
+            {"name": "受診\n診断",     "icon": "🏥", "desc": "外来受診・検査・診断",             "players": "病院・クリニック",             "issues": "医師・看護師不足・偏在"},
+            {"name": "治療\n入院",     "icon": "💊", "desc": "治療・手術・入院管理",             "players": "急性期病院・専門医",           "issues": "医療過疎・移動距離の問題"},
+            {"name": "回復\nリハビリ", "icon": "🏃", "desc": "リハビリ・回復期病棟・通所リハ",  "players": "リハビリ専門職・施設",         "issues": "セラピスト不足"},
+            {"name": "在宅\n介護",    "icon": "🏠", "desc": "訪問介護・デイサービス・施設介護", "players": "介護事業者・ヘルパー",         "issues": "介護人材不足・処遇改善"},
+            {"name": "看取り\n終末期", "icon": "🌸", "desc": "緩和ケア・看取り・家族支援",      "players": "在宅医・ホスピス・家族",       "issues": "在宅看取り体制の整備"},
+        ],
+        "support": ["🎓 医療・介護人材の育成・定着（処遇改善・奨学金）", "💻 デジタル医療（オンライン診療・AI診断・電子カルテ）", "🤝 地域包括ケアシステムの強化", "🚗 移動手段確保（医療過疎地への交通支援）"],
+        "opportunity": "高齢化が最も進む秋田では医療・介護需要が急増。予防医療・ICT活用・地域包括ケアの充実が高齢者QOLと産業振興を両立させる。",
+    },
+}
+
+
+def _draw_value_chain_fig(stages: list, base_color: str) -> go.Figure:
+    """バリューチェーン図を Plotly で描画する"""
+    n = len(stages)
+    gap = 0.018          # ボックス間の隙間（paper 座標）
+    box_w = (1.0 - gap * (n - 1)) / n
+
+    # ベースカラーを段階的に明るくしたグラデーション
+    r0, g0, b0 = int(base_color[1:3], 16), int(base_color[3:5], 16), int(base_color[5:7], 16)
+    def _lighten(r, g, b, step):
+        f = 1 + step * 0.10
+        return f"rgb({min(255,int(r*f))},{min(255,int(g*f))},{min(255,int(b*f))})"
+    stage_colors = [_lighten(r0, g0, b0, i) for i in range(n)]
+
+    fig = go.Figure()
+
+    for i, stage in enumerate(stages):
+        x0 = i * (box_w + gap)
+        x1 = x0 + box_w
+        xc = (x0 + x1) / 2
+
+        # ボックス
+        fig.add_shape(
+            type="rect", xref="paper", yref="paper",
+            x0=x0, x1=x1, y0=0.05, y1=0.95,
+            fillcolor=stage_colors[i],
+            line=dict(color="white", width=2),
+        )
+        # アイコン
+        fig.add_annotation(
+            xref="paper", yref="paper",
+            x=xc, y=0.73, text=stage["icon"],
+            showarrow=False, font=dict(size=22),
+        )
+        # ステージ名
+        fig.add_annotation(
+            xref="paper", yref="paper",
+            x=xc, y=0.28,
+            text=f"<b>{stage['name'].replace(chr(10), '<br>')}</b>",
+            showarrow=False,
+            font=dict(color="white", size=10),
+            align="center",
+        )
+        # 次のボックスへの矢印
+        if i < n - 1:
+            fig.add_annotation(
+                xref="paper", yref="paper",
+                axref="paper", ayref="paper",
+                x=x1 + gap, y=0.5,
+                ax=x1, ay=0.5,
+                arrowhead=2, arrowsize=1.2,
+                arrowwidth=3, arrowcolor="#bdbdbd",
+            )
+
+    fig.update_layout(
+        height=165,
+        margin=dict(l=0, r=0, t=4, b=4),
+        xaxis=dict(visible=False, range=[0, 1]),
+        yaxis=dict(visible=False, range=[0, 1]),
+        plot_bgcolor="white", paper_bgcolor="white",
+        showlegend=False,
+    )
+    return fig
+
+
+def page_value_chain():
+    st.title("⛓️ バリューチェーン分析")
+    st.caption("業界別の価値創造プロセスと秋田県における課題・機会を分析します")
+    st.markdown("---")
+
+    selected = st.selectbox("業界を選択", list(_VALUE_CHAIN_DATA.keys()))
+    vc = _VALUE_CHAIN_DATA[selected]
+    stages = vc["stages"]
+
+    # ── バリューチェーン図 ─────────────────────────────────────
+    st.plotly_chart(
+        _draw_value_chain_fig(stages, vc["color"]),
+        use_container_width=True,
+    )
+
+    # ── 各ステージ詳細 ─────────────────────────────────────────
+    st.markdown("##### 各ステージの詳細")
+    cols = st.columns(len(stages))
+    for col, stage in zip(cols, stages):
+        with col:
+            name = stage["name"].replace("\n", " ")
+            st.markdown(f"**{stage['icon']} {name}**")
+            st.caption(stage["desc"])
+            st.markdown(f"<small>👥 {stage['players']}</small>", unsafe_allow_html=True)
+            st.markdown(f"<small style='color:#e53935'>⚠️ {stage['issues']}</small>", unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ── サポート活動 & 機会 ────────────────────────────────────
+    col_l, col_r = st.columns(2)
+    with col_l:
+        st.markdown("#### 🔧 サポート活動")
+        for s in vc["support"]:
+            st.markdown(f"- {s}")
+    with col_r:
+        st.markdown("#### 💡 秋田県における機会")
+        st.info(vc["opportunity"])
+
+
 # ルーティング
 # ============================================================
 if page == "📊 総合概要":
@@ -2992,6 +3169,8 @@ elif page == "📊 業種別生産性分析":
     page_industry_census()
 elif page == "🗺️ 産業×市町村マトリックス":
     page_industry_matrix()
+elif page == "⛓️ バリューチェーン分析":
+    page_value_chain()
 elif page == "🗾 東北4県比較":
     page_tohoku()
 elif page == "📈 地域市場シェア分析":

@@ -3531,10 +3531,10 @@ def _draw_supply_chain_fig(chain_data: dict) -> go.Figure:
     n_layers = len(layers)
     max_players = max(len(layer["players"]) for layer in layers)
 
-    label_w = 1.5       # 左側ラベル列の幅（x座標単位）
-    gap_lr = 0.12       # ラベル列とボックス列の隙間
-    margin_x = 0.08    # ボックス左右マージン
-    margin_y = 0.13    # ボックス上下マージン
+    label_w = 0.9       # 左側ラベル列の幅（x座標単位）※狭くして右側ボックスを広く
+    gap_lr = 0.06       # ラベル列とボックス列の隙間
+    margin_x = 0.06    # ボックス左右マージン
+    margin_y = 0.12    # ボックス上下マージン
 
     # カラーグラデーション（川上=ベース色、川下=やや明るい）
     r0, g0, b0 = int(base_color[1:3], 16), int(base_color[3:5], 16), int(base_color[5:7], 16)
@@ -3571,7 +3571,7 @@ def _draw_supply_chain_fig(chain_data: dict) -> go.Figure:
             x=-(label_w / 2 + gap_lr), y=yc,
             text=layer["label"].replace("\n", "<br>"),
             showarrow=False,
-            font=dict(color="white", size=9, family="sans-serif"),
+            font=dict(color="white", size=10, family="sans-serif"),
             align="center",
         )
 
@@ -3589,18 +3589,18 @@ def _draw_supply_chain_fig(chain_data: dict) -> go.Figure:
             )
             fig.add_annotation(
                 xref="x", yref="y",
-                x=pxc, y=yc - 0.13,
+                x=pxc, y=yc - 0.14,
                 text=f"<b>{player['name']}</b>",
                 showarrow=False,
-                font=dict(color="white", size=10),
+                font=dict(color="white", size=12),
                 align="center",
             )
             fig.add_annotation(
                 xref="x", yref="y",
-                x=pxc, y=yc + 0.18,
+                x=pxc, y=yc + 0.19,
                 text=player["desc"],
                 showarrow=False,
-                font=dict(color="rgba(255,255,255,0.88)", size=8),
+                font=dict(color="rgba(255,255,255,0.88)", size=10),
                 align="center",
             )
 

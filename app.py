@@ -3531,8 +3531,8 @@ def _draw_supply_chain_fig(chain_data: dict) -> go.Figure:
     n_layers = len(layers)
     max_players = max(len(layer["players"]) for layer in layers)
 
-    label_w = 0.9       # 左側ラベル列の幅（x座標単位）※狭くして右側ボックスを広く
-    gap_lr = 0.06       # ラベル列とボックス列の隙間
+    label_w = 0.55      # 左側ラベル列の幅（x座標単位）※狭くして右側ボックスを広く
+    gap_lr = 0.05       # ラベル列とボックス列の隙間
     margin_x = 0.06    # ボックス左右マージン
     margin_y = 0.12    # ボックス上下マージン
 
@@ -3571,7 +3571,7 @@ def _draw_supply_chain_fig(chain_data: dict) -> go.Figure:
             x=-(label_w / 2 + gap_lr), y=yc,
             text=layer["label"].replace("\n", "<br>"),
             showarrow=False,
-            font=dict(color="white", size=10, family="sans-serif"),
+            font=dict(color="white", size=12, family="sans-serif"),
             align="center",
         )
 

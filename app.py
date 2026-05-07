@@ -1646,19 +1646,9 @@ def page_subsidies():
     today = date.today()
 
     # ---- フィルター ----
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        sel_shubetsu = st.multiselect("種別", ["国", "県"], default=["国", "県"])
-    with col2:
-        sel_food = st.selectbox("食品製造業向け", ["すべて", "◎ 特に有効", "○以上"])
-    with col3:
-        sel_shotengai = st.selectbox("商店街向け", ["すべて", "◎ 特に有効", "○以上"])
+    sel_shubetsu = st.multiselect("種別", ["国", "県"], default=["国", "県"])
 
     df_f = df[df["種別"].isin(sel_shubetsu)].copy()
-    if sel_food == "◎ 特に有効":
-        df_f = df_f[df_f["食品製造業向け"] == "◎"]
-    if sel_shotengai == "◎ 特に有効":
-        df_f = df_f[df_f["商店街向け"] == "◎"]
 
     # ---- 締切までの日数を計算 ----
     def days_left(deadline_str):
@@ -1721,17 +1711,15 @@ def page_subsidies():
     for _, row in df_f.sort_values("残り日数").iterrows():
         header = f"{row['状態']} **{row['補助金名']}**　({row['種別']}) ｜ 上限: {row['補助上限']}"
         with st.expander(header, expanded=(row["残り日数"] <= 30)):
-            col1, col2, col3 = st.columns(3)
+            col1, col2 = st.columns(2)
             with col1:
                 st.markdown(f"**対象企業**\n\n{row['対象']}")
                 st.markdown(f"**補助率**\n\n{row['補助率']}")
+                st.markdown(f"**窓口**\n\n{row['窓口']}")
             with col2:
                 st.markdown(f"**申請開始**\n\n{row['申請開始']}")
                 st.markdown(f"**申請締切**\n\n{row['申請締切']}")
                 st.markdown(f"**次回公募予定**\n\n{row['次回公募予定']}")
-            with col3:
-                st.markdown(f"**窓口**\n\n{row['窓口']}")
-                st.markdown(f"**食品製造業** {row['食品製造業向け']} ／ **商店街** {row['商店街向け']}")
             st.info(f"💡 {row['メモ']}")
             st.markdown(f"🔗 [公式サイトを開く]({row['URL']})")
 

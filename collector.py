@@ -449,7 +449,23 @@ def get_case_studies() -> pd.DataFrame:
 # ============================================================
 
 def get_subsidies() -> pd.DataFrame:
-    """補助金・支援制度一覧"""
+    """補助金・支援制度一覧。
+    data/policy_cache/subsidies.json があればそちらを優先して読み込む。
+    なければ collector.py 内のハードコードデータを使用する。
+    """
+    from pathlib import Path
+    cache_path = Path(__file__).parent / "data" / "policy_cache" / "subsidies.json"
+    if cache_path.exists():
+        try:
+            import json
+            cache = json.loads(cache_path.read_text(encoding="utf-8"))
+            records = cache.get("data", [])
+            if records:
+                return pd.DataFrame(records)
+        except Exception as e:
+            print(f"[get_subsidies] JSONキャッシュ読み込みエラー: {e} → ハードコードを使用")
+
+    # ── JSON キャッシュがない場合のフォールバック ──────────────
     from datetime import date
     data = {
         "補助金名": [

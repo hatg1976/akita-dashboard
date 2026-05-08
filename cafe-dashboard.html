@@ -1,0 +1,1099 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Café Lumière — 経営ダッシュボード</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Noto+Sans+JP:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --espresso:   #2C1810;
+      --roast:      #3D2314;
+      --mocha:      #6B3F2A;
+      --caramel:    #C4843A;
+      --terracotta: #C4603A;
+      --cream:      #F7EED8;
+      --ivory:      #FDF9F2;
+      --sage:       #7A9B6E;
+      --gold:       #C9A227;
+      --blush:      #E8C4A0;
+      --success:    #5B8A52;
+      --warning:    #D4870A;
+      --danger:     #C44A3A;
+      --text-1:     #1E0F07;
+      --text-2:     #5C3A22;
+      --text-3:     #9B7355;
+    }
+
+    body {
+      font-family: 'Noto Sans JP', sans-serif;
+      background: #EFE4D0;
+      background-image:
+        radial-gradient(ellipse 60% 50% at 10% 15%, rgba(196,132,58,0.10) 0%, transparent 60%),
+        radial-gradient(ellipse 50% 60% at 90% 85%, rgba(196,96,58,0.07) 0%, transparent 60%);
+      min-height: 100vh;
+      color: var(--text-1);
+    }
+
+    /* ──────── HEADER ──────── */
+    .header {
+      background: var(--espresso);
+      height: 68px;
+      padding: 0 36px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 200;
+      box-shadow: 0 4px 24px rgba(44,24,16,0.35);
+    }
+    .logo { display: flex; align-items: baseline; gap: 12px; }
+    .logo-name { font-family: 'Playfair Display', serif; font-style: italic; font-size: 22px; color: var(--cream); letter-spacing: 0.04em; }
+    .logo-tag  { font-size: 10px; font-weight: 300; color: var(--caramel); letter-spacing: 0.22em; text-transform: uppercase; }
+
+    .header-center { display: flex; gap: 8px; }
+    .badge { display: flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 20px; border: 1px solid rgba(196,132,58,0.35); background: rgba(196,132,58,0.10); font-size: 11px; color: var(--caramel); letter-spacing: 0.04em; }
+    .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--caramel); animation: blink 2.4s ease-in-out infinite; }
+    .badge-dot.csv { background: var(--sage); }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    .view-toggle { display: flex; background: rgba(255,255,255,0.08); border-radius: 8px; padding: 2px; }
+    .view-btn { padding: 5px 14px; border: none; background: none; color: rgba(245,237,216,0.55); font-family: 'Noto Sans JP', sans-serif; font-size: 12px; cursor: pointer; border-radius: 6px; transition: all 0.2s; }
+    .view-btn.active { background: var(--caramel); color: #fff; }
+    .month-select { background: rgba(255,255,255,0.09); border: 1px solid rgba(196,132,58,0.40); color: var(--cream); padding: 6px 12px; border-radius: 8px; font-family: 'Noto Sans JP', sans-serif; font-size: 13px; cursor: pointer; outline: none; }
+    .month-select option { background: var(--espresso); }
+
+    /* CSV Button */
+    .csv-btn {
+      display: flex; align-items: center; gap: 6px;
+      padding: 7px 16px; border-radius: 8px;
+      border: 1px solid rgba(196,132,58,0.45);
+      background: rgba(196,132,58,0.15);
+      color: var(--cream); font-family: 'Noto Sans JP', sans-serif;
+      font-size: 12px; cursor: pointer; transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .csv-btn:hover { background: rgba(196,132,58,0.30); }
+    .csv-btn svg { width: 14px; height: 14px; fill: var(--caramel); flex-shrink: 0; }
+
+    /* ──────── MODAL ──────── */
+    .modal-overlay {
+      display: none;
+      position: fixed; inset: 0; z-index: 9000;
+      background: rgba(28,14,8,0.72);
+      backdrop-filter: blur(4px);
+      align-items: center; justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+
+    .modal {
+      background: var(--ivory);
+      border-radius: 20px;
+      padding: 0;
+      width: 90%;
+      max-width: 680px;
+      box-shadow: 0 24px 60px rgba(44,24,16,0.35);
+      overflow: hidden;
+    }
+    .modal-head {
+      background: var(--espresso);
+      padding: 20px 28px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .modal-title { font-family: 'Playfair Display', serif; font-style: italic; font-size: 18px; color: var(--cream); }
+    .modal-close { background: none; border: none; color: rgba(245,237,216,0.6); font-size: 22px; cursor: pointer; line-height: 1; padding: 0 4px; }
+    .modal-close:hover { color: var(--cream); }
+
+    .modal-body { padding: 28px; display: flex; flex-direction: column; gap: 20px; }
+
+    .modal-note {
+      background: rgba(196,132,58,0.08);
+      border: 1px solid rgba(196,132,58,0.2);
+      border-radius: 10px;
+      padding: 12px 16px;
+      font-size: 12px;
+      color: var(--text-2);
+      line-height: 1.7;
+    }
+    .modal-note strong { color: var(--mocha); }
+
+    .upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+    .upload-zone {
+      border: 2px dashed rgba(196,132,58,0.35);
+      border-radius: 12px;
+      padding: 20px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+    }
+    .upload-zone:hover, .upload-zone.drag-over {
+      border-color: var(--caramel);
+      background: rgba(196,132,58,0.06);
+    }
+    .upload-zone.done { border-color: var(--sage); background: rgba(91,138,82,0.05); }
+    .upload-icon { font-size: 26px; margin-bottom: 8px; }
+    .upload-label { font-size: 12px; font-weight: 700; color: var(--mocha); margin-bottom: 4px; }
+    .upload-sub   { font-size: 11px; color: var(--text-3); line-height: 1.5; }
+    .upload-status { font-size: 11px; font-weight: 500; margin-top: 8px; color: var(--sage); display: none; }
+    .upload-zone.done .upload-status { display: block; }
+    .upload-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+    .tpl-link { font-size: 11px; color: var(--caramel); text-decoration: underline; cursor: pointer; margin-top: 6px; display: inline-block; }
+    .tpl-link:hover { color: var(--terracotta); }
+
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+    .btn-primary {
+      padding: 10px 28px; border-radius: 8px; border: none;
+      background: var(--caramel); color: #fff;
+      font-family: 'Noto Sans JP', sans-serif; font-size: 13px; font-weight: 700;
+      cursor: pointer; transition: background 0.2s;
+    }
+    .btn-primary:hover { background: var(--terracotta); }
+    .btn-primary:disabled { opacity: 0.45; cursor: default; }
+    .btn-secondary {
+      padding: 10px 20px; border-radius: 8px;
+      border: 1px solid rgba(196,132,58,0.35);
+      background: none; color: var(--text-2);
+      font-family: 'Noto Sans JP', sans-serif; font-size: 13px;
+      cursor: pointer;
+    }
+    .btn-secondary:hover { background: rgba(196,132,58,0.08); }
+
+    .demo-note { font-size: 11px; color: var(--text-3); text-align: center; margin-top: 4px; }
+
+    /* ──────── LAYOUT ──────── */
+    .main { max-width: 1440px; margin: 0 auto; padding: 28px 32px 64px; }
+
+    .divider { display: flex; align-items: center; gap: 16px; margin: 28px 0 22px; }
+    .divider-line { flex: 1; height: 1px; background: linear-gradient(to right, transparent, rgba(196,132,58,0.35), transparent); }
+    .divider-text { font-family: 'Playfair Display', serif; font-style: italic; font-size: 13px; color: var(--caramel); white-space: nowrap; }
+
+    .data-mode-tag {
+      font-size: 10px; padding: 2px 10px; border-radius: 10px; font-weight: 500;
+      letter-spacing: 0.06em;
+    }
+    .data-mode-tag.demo { background: rgba(196,132,58,0.12); color: var(--caramel); border: 1px solid rgba(196,132,58,0.3); }
+    .data-mode-tag.live { background: rgba(91,138,82,0.12); color: var(--sage);    border: 1px solid rgba(91,138,82,0.3); }
+
+    /* ──────── CARD ──────── */
+    .card { background: #fff; border-radius: 18px; padding: 22px 24px; box-shadow: 0 2px 14px rgba(44,24,16,0.06), 0 0 0 1px rgba(196,132,58,0.10); transition: box-shadow 0.25s; }
+    .card:hover { box-shadow: 0 6px 28px rgba(44,24,16,0.10), 0 0 0 1px rgba(196,132,58,0.15); }
+    .card-hd { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 18px; }
+    .card-title { font-family: 'Playfair Display', serif; font-size: 16px; color: var(--espresso); }
+    .card-sub { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+    .src-tag { font-size: 10px; color: var(--caramel); background: rgba(196,132,58,0.08); border: 1px solid rgba(196,132,58,0.22); padding: 3px 9px; border-radius: 4px; letter-spacing: 0.05em; white-space: nowrap; }
+
+    /* ──────── KPI GRID ──────── */
+    .kpi-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; margin-bottom: 20px; }
+    .kpi-card { background: #fff; border-radius: 16px; padding: 18px 16px 16px; box-shadow: 0 2px 12px rgba(44,24,16,0.06), 0 0 0 1px rgba(196,132,58,0.10); position: relative; overflow: hidden; transition: transform 0.22s, box-shadow 0.22s; animation: fadeUp 0.4s ease both; }
+    .kpi-card:hover { transform: translateY(-3px); box-shadow: 0 10px 28px rgba(44,24,16,0.11); }
+    .kpi-card::after { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--caramel), var(--terracotta)); }
+    .kpi-label { font-size: 10px; letter-spacing: 0.09em; color: var(--text-3); margin-bottom: 9px; font-weight: 500; }
+    .kpi-value { font-family: 'DM Mono', monospace; font-size: 20px; font-weight: 500; color: var(--espresso); line-height: 1; margin-bottom: 9px; }
+    .kpi-value.sm { font-size: 18px; }
+    .kpi-trend { display: flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 500; }
+    .kpi-trend.up   { color: var(--success); }
+    .kpi-trend.down { color: var(--danger); }
+    .kpi-trend.flat { color: var(--text-3); }
+
+    /* ──────── GRIDS ──────── */
+    .grid-2-1 { display: grid; grid-template-columns: 2fr 1fr; gap: 18px; margin-bottom: 18px; }
+    .grid-1-1 { display: grid; grid-template-columns: 1fr 1fr;  gap: 18px; margin-bottom: 18px; }
+    .grid-3-2 { display: grid; grid-template-columns: 3fr 2fr;  gap: 18px; margin-bottom: 18px; }
+    .grid-3   { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; margin-bottom: 18px; }
+    .chart-wrap { position: relative; }
+
+    /* ──────── P&L TABLE ──────── */
+    .pl-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .pl-table thead th { text-align: right; font-size: 10px; color: var(--text-3); font-weight: 500; letter-spacing: 0.07em; padding: 6px 8px 10px; border-bottom: 2px solid rgba(196,132,58,0.25); }
+    .pl-table thead th:first-child { text-align: left; }
+    .pl-table td { padding: 8px 8px; }
+    .pl-table td:not(:first-child) { text-align: right; font-family: 'DM Mono', monospace; font-size: 12px; }
+    .pl-table tr { border-bottom: 1px solid rgba(196,132,58,0.08); }
+    .pl-table tr:hover td { background: rgba(196,132,58,0.025); }
+    .pl-section  td { font-size: 10px; letter-spacing: 0.09em; color: var(--text-3); padding-top: 14px; padding-bottom: 3px; font-weight: 500; }
+    .pl-subtotal td { font-weight: 600; color: var(--espresso); border-top: 1px solid rgba(196,132,58,0.22); }
+    .pl-total    td { font-weight: 700; font-size: 14px; color: var(--espresso); border-top: 2px solid var(--caramel); padding-top: 11px; }
+    .pl-profit   td { color: var(--success) !important; }
+    .pl-loss     td { color: var(--danger)  !important; }
+    .chg-badge { display: inline-block; font-size: 10px; font-family: 'Noto Sans JP', sans-serif; padding: 1px 5px; border-radius: 3px; }
+    .chg-up    { background: rgba(91,138,82,0.10);  color: var(--success); }
+    .chg-down  { background: rgba(196,74,58,0.10);  color: var(--danger); }
+    .chg-neu   { color: var(--text-3); }
+
+    /* ──────── MENU RANKING ──────── */
+    .menu-list { display: flex; flex-direction: column; gap: 10px; }
+    .menu-row  { display: flex; align-items: center; gap: 10px; }
+    .menu-rank { font-family: 'Playfair Display', serif; font-size: 17px; color: var(--caramel); width: 24px; text-align: center; flex-shrink: 0; line-height: 1; }
+    .menu-rank.gold-rank { color: var(--gold); }
+    .menu-info { flex: 1; min-width: 0; }
+    .menu-name { font-size: 12px; font-weight: 500; color: var(--text-1); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .menu-bar-bg   { height: 4px; background: rgba(196,132,58,0.12); border-radius: 2px; }
+    .menu-bar-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, var(--caramel), var(--terracotta)); }
+    .menu-cnt { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-3); white-space: nowrap; }
+
+    /* ──────── ALERTS ──────── */
+    .alert-card { border-radius: 14px; padding: 16px 18px; display: flex; gap: 12px; align-items: flex-start; }
+    .alert-card.success { background: rgba(91,138,82,0.07);  border: 1px solid rgba(91,138,82,0.22); }
+    .alert-card.warning { background: rgba(212,135,10,0.07); border: 1px solid rgba(212,135,10,0.22); }
+    .alert-card.info    { background: rgba(196,132,58,0.07); border: 1px solid rgba(196,132,58,0.22); }
+    .alert-icon  { font-size: 22px; flex-shrink: 0; line-height: 1.3; }
+    .alert-title { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+    .alert-card.success .alert-title { color: var(--success); }
+    .alert-card.warning .alert-title { color: var(--warning); }
+    .alert-card.info    .alert-title { color: var(--mocha); }
+    .alert-text { font-size: 12px; color: var(--text-2); line-height: 1.65; }
+
+    /* ──────── CATEGORY LEGEND ──────── */
+    .cat-legend { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 10px; }
+    .cat-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-2); }
+    .cat-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+    /* ──────── FOOTER ──────── */
+    .footer { text-align: center; padding: 20px; font-size: 11px; color: var(--text-3); letter-spacing: 0.06em; }
+
+    /* ──────── ANIMATIONS ──────── */
+    @keyframes fadeUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+    .kpi-card:nth-child(1){animation-delay:.04s}
+    .kpi-card:nth-child(2){animation-delay:.08s}
+    .kpi-card:nth-child(3){animation-delay:.12s}
+    .kpi-card:nth-child(4){animation-delay:.16s}
+    .kpi-card:nth-child(5){animation-delay:.20s}
+    .kpi-card:nth-child(6){animation-delay:.24s}
+
+    /* ──────── RESPONSIVE ──────── */
+    @media(max-width:1100px){
+      .kpi-grid{grid-template-columns:repeat(3,1fr)}
+      .grid-2-1,.grid-3-2{grid-template-columns:1fr}
+    }
+    @media(max-width:760px){
+      .main{padding:16px 14px 48px}
+      .kpi-grid{grid-template-columns:repeat(2,1fr)}
+      .grid-1-1,.grid-3,.upload-grid{grid-template-columns:1fr}
+      .header-center{display:none}
+      .logo-tag{display:none}
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════ HEADER ═══════ -->
+<header class="header">
+  <div class="logo">
+    <span class="logo-name">Café Lumière</span>
+    <span class="logo-tag">経営ダッシュボード</span>
+  </div>
+  <div class="header-center" id="headerBadges">
+    <div class="badge"><span class="badge-dot csv" id="freeeDot"></span><span id="freeeLabel">freee（ダミー）</span></div>
+    <div class="badge"><span class="badge-dot csv" id="usenDot"></span><span id="usenLabel">USENレジ（ダミー）</span></div>
+  </div>
+  <div class="header-right">
+    <button class="csv-btn" id="csvOpenBtn">
+      <svg viewBox="0 0 20 20"><path d="M10 2a1 1 0 01.707.293l4 4A1 1 0 0115 7h-3v6a1 1 0 01-2 0V7H7a1 1 0 01-.707-1.707l4-4A1 1 0 0110 2zM3 15a1 1 0 011-1h12a1 1 0 010 2H4a1 1 0 01-1-1z"/></svg>
+      CSVを読み込む
+    </button>
+    <div class="view-toggle">
+      <button class="view-btn active" id="btnMonthly">月次</button>
+      <button class="view-btn"        id="btnWeekly">週次</button>
+    </div>
+    <select class="month-select" id="monthSelect">
+      <option value="0" >2025年 5月（開業）</option>
+      <option value="1" >2025年 6月</option>
+      <option value="2" >2025年 7月</option>
+      <option value="3" >2025年 8月</option>
+      <option value="4" >2025年 9月</option>
+      <option value="5" >2025年10月</option>
+      <option value="6" >2025年11月</option>
+      <option value="7" >2025年12月</option>
+      <option value="8" >2026年 1月</option>
+      <option value="9" >2026年 2月</option>
+      <option value="10">2026年 3月</option>
+      <option value="11" selected>2026年 4月</option>
+    </select>
+  </div>
+</header>
+
+<!-- ═══════ CSV MODAL ═══════ -->
+<div class="modal-overlay" id="csvModal">
+  <div class="modal">
+    <div class="modal-head">
+      <span class="modal-title">CSVデータ読み込み</span>
+      <button class="modal-close" id="csvCloseBtn">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-note">
+        <strong>freee</strong>：損益計算書レポートを CSV でエクスポートし、下のテンプレートの形式に合わせてアップロードしてください。<br>
+        <strong>USENレジ</strong>：売上レポートを CSV でエクスポートし、同様にテンプレート形式でアップロードしてください。<br>
+        テンプレートが不明な場合は「テンプレートをダウンロード」から雛形を取得できます。
+      </div>
+
+      <div class="upload-grid">
+        <!-- freee -->
+        <div>
+          <div class="upload-zone" id="freeeZone">
+            <input type="file" id="freeeFile" accept=".csv">
+            <div class="upload-icon">📊</div>
+            <div class="upload-label">freee — 損益データ</div>
+            <div class="upload-sub">月次 P&amp;L CSV<br>（売上・原価・経費）</div>
+            <div class="upload-status" id="freeeStatus">✓ 読み込み済み</div>
+          </div>
+          <div style="text-align:center">
+            <span class="tpl-link" id="tplFreee">📥 テンプレートをダウンロード</span>
+          </div>
+        </div>
+
+        <!-- USEN -->
+        <div>
+          <div class="upload-zone" id="usenZone">
+            <input type="file" id="usenFile" accept=".csv">
+            <div class="upload-icon">🧾</div>
+            <div class="upload-label">USENレジ — 売上データ</div>
+            <div class="upload-sub">月次 売上・来客 CSV<br>（人気メニュー含む）</div>
+            <div class="upload-status" id="usenStatus">✓ 読み込み済み</div>
+          </div>
+          <div style="text-align:center">
+            <span class="tpl-link" id="tplUsen">📥 テンプレートをダウンロード</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-secondary" id="csvResetBtn">ダミーデータに戻す</button>
+        <button class="btn-primary"   id="csvApplyBtn">適用する</button>
+      </div>
+      <div class="demo-note" id="modalDemoNote">現在はダミーデータを表示中です</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ MAIN ═══════ -->
+<main class="main">
+  <div class="divider">
+    <div class="divider-line"></div>
+    <div class="divider-text">主要指標 — <span id="currentLabel">2026年4月</span></div>
+    <span class="data-mode-tag demo" id="dataModeBadge">ダミーデータ</span>
+    <div class="divider-line"></div>
+  </div>
+  <div class="kpi-grid" id="kpiGrid"></div>
+
+  <div class="grid-2-1">
+    <div class="card">
+      <div class="card-hd">
+        <div><div class="card-title">月次売上推移</div><div class="card-sub">2025年5月 〜 2026年4月 ／ 目標ライン ¥600,000</div></div>
+        <span class="src-tag">USEN レジ</span>
+      </div>
+      <div class="chart-wrap" style="height:230px"><canvas id="salesChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-hd">
+        <div><div class="card-title">カテゴリ別売上</div><div class="card-sub">当月構成</div></div>
+        <span class="src-tag">USEN レジ</span>
+      </div>
+      <div class="chart-wrap" style="height:190px"><canvas id="categoryChart"></canvas></div>
+      <div class="cat-legend" id="catLegend"></div>
+    </div>
+  </div>
+
+  <div class="grid-1-1">
+    <div class="card">
+      <div class="card-hd">
+        <div><div class="card-title">時間帯別来客数</div><div class="card-sub">当月平均 / 日（人）</div></div>
+        <span class="src-tag">USEN レジ</span>
+      </div>
+      <div class="chart-wrap" style="height:200px"><canvas id="hourlyChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-hd">
+        <div><div class="card-title">曜日別売上</div><div class="card-sub">当月合計（千円）</div></div>
+        <span class="src-tag">USEN レジ</span>
+      </div>
+      <div class="chart-wrap" style="height:200px"><canvas id="weekdayChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="grid-3-2">
+    <div class="card">
+      <div class="card-hd">
+        <div><div class="card-title">損益サマリー</div><div class="card-sub">当月 vs 前月</div></div>
+        <span class="src-tag">freee</span>
+      </div>
+      <table class="pl-table" id="plTable"></table>
+    </div>
+    <div class="card">
+      <div class="card-hd">
+        <div><div class="card-title">人気メニュー TOP10</div><div class="card-sub">販売杯数ランキング</div></div>
+        <span class="src-tag">USEN レジ</span>
+      </div>
+      <div class="menu-list" id="menuList"></div>
+    </div>
+  </div>
+
+  <div class="divider">
+    <div class="divider-line"></div>
+    <div class="divider-text">アラート &amp; 経営アドバイス</div>
+    <div class="divider-line"></div>
+  </div>
+  <div class="grid-3" id="alertGrid"></div>
+
+  <div class="footer">
+    Café Lumière 経営ダッシュボード &nbsp;|&nbsp;
+    データ出典: freee（会計） ／ USEN レジ（POS） &nbsp;|&nbsp;
+    令和7年5月 開業
+  </div>
+</main>
+
+<script>
+/* ================================================================
+   DEMO DATA
+================================================================ */
+const MONTHS = ['2025年5月','2025年6月','2025年7月','2025年8月','2025年9月',
+                '2025年10月','2025年11月','2025年12月','2026年1月','2026年2月',
+                '2026年3月','2026年4月'];
+
+const DEMO = {
+  sales:  [420000,523000,581000,647000,558000,624000,592000,718000,484000,517000,651000,682000],
+  guests: [304,381,421,462,395,443,408,487,337,362,476,498],
+  cogsR:  [0.34,0.32,0.31,0.30,0.32,0.30,0.31,0.29,0.33,0.32,0.29,0.30],
+  rent:   Array(12).fill(150000),
+  util:   [38000,40000,43000,48000,44000,41000,43000,46000,50000,47000,42000,42000],
+  labor:  [120000,138000,145000,158000,142000,150000,140000,168000,128000,135000,163000,165000],
+  other:  [28000,30000,31000,32000,29000,33000,30000,35000,28000,29000,34000,35000],
+  repeat: [42,45,48,51,50,53,52,55,49,51,57,58],
+};
+const DEMO_CAT_RATIOS = [0.38,0.24,0.20,0.18]; // coffee,food,dessert,drink
+const DEMO_MENU = [
+  {name:'ブレンドコーヒー',cnt:387},{name:'カフェラテ',cnt:312},
+  {name:'モーニングセット',cnt:248},{name:'カプチーノ',cnt:221},
+  {name:'チーズケーキ',cnt:198},{name:'アイスコーヒー',cnt:187},
+  {name:'カフェモカ',cnt:165},{name:'バゲットサンド',cnt:143},
+  {name:'ティラミス',cnt:128},{name:'アールグレイ',cnt:112},
+];
+const HOURLY_GUESTS = [0,0,0,0,0,0,0,0,2.8,7.6,13.4,17.8,21.2,15.6,11.8,16.2,19.0,13.8,8.4,5.0,2.6,1.2,0,0];
+const WEEKDAY_BASE  = [68,72,58,62,76,102,96];
+const TARGET_SALES  = 600000;
+const CAT_LABELS    = ['コーヒー','フード','デザート','ドリンク'];
+const CAT_COLORS    = ['#3D2314','#C4843A','#C4603A','#E8C4A0'];
+
+/* ================================================================
+   ACTIVE DATA STATE (starts as demo, replaced by CSV upload)
+================================================================ */
+let raw = buildRaw(DEMO);
+let menuData  = DEMO_MENU;
+let catData   = buildCatData(DEMO.sales, DEMO_CAT_RATIOS);
+let isLiveData = false;
+
+// Staged (before apply)
+let staged = { freee: null, usen: null };
+
+function buildRaw(d) {
+  const r = { ...d };
+  r.avgSpend = r.sales.map((s,i) => Math.round(s / r.guests[i]));
+  r.cogs     = r.sales.map((s,i) => Math.round(s * r.cogsR[i]));
+  r.gp       = r.sales.map((s,i) => s - r.cogs[i]);
+  r.sga      = r.sales.map((_,i) => r.rent[i]+r.util[i]+r.labor[i]+r.other[i]);
+  r.op       = r.sales.map((_,i) => r.gp[i] - r.sga[i]);
+  return r;
+}
+
+function buildCatData(sales, ratios) {
+  return sales.map(s => ratios.map(r => Math.round(s * r)));
+}
+
+/* ================================================================
+   STATE
+================================================================ */
+let SEL = 11;
+
+/* ================================================================
+   UTILS
+================================================================ */
+const yen     = n => '¥' + n.toLocaleString('ja-JP');
+const pctDiff = (a,b) => b === 0 ? 0 : ((a-b)/b*100);
+const sign    = n => n >= 0 ? '+' : '';
+
+/* ================================================================
+   KPI RENDER
+================================================================ */
+function renderKPIs() {
+  const i = SEL, p = i > 0 ? i-1 : 0;
+  const cards = [
+    { label:'月間売上',     val:yen(raw.sales[i]),  cur:raw.sales[i],  prv:raw.sales[p],  neg:false },
+    { label:'月間来客数',   val:raw.guests[i].toLocaleString()+' 名', cur:raw.guests[i], prv:raw.guests[p], neg:false },
+    { label:'客単価',       val:yen(raw.avgSpend[i]),cur:raw.avgSpend[i],prv:raw.avgSpend[p],neg:false },
+    { label:'原価率',       val:(raw.cogsR[i]*100).toFixed(1)+'%', cur:raw.cogsR[i],prv:raw.cogsR[p],neg:true,sub:`前月 ${(raw.cogsR[p]*100).toFixed(1)}%` },
+    { label:'営業利益',     val:yen(raw.op[i]),  cur:raw.op[i],  prv:raw.op[p],  neg:false, sm:true },
+    { label:'リピート率（推定）',val:raw.repeat[i]+'%',cur:raw.repeat[i],prv:raw.repeat[p],neg:false },
+  ];
+  document.getElementById('kpiGrid').innerHTML = cards.map(c => {
+    const d     = i > 0 ? pctDiff(c.cur, c.prv) : 0;
+    const good  = c.neg ? d < 0 : d >= 0;
+    const cls   = i === 0 ? 'flat' : good ? 'up' : 'down';
+    const arrow = i === 0 ? '—' : d > 0 ? '▲' : d < 0 ? '▼' : '—';
+    const lbl   = c.sub ? c.sub : (i === 0 ? '開業月' : `前月比 ${sign(d)}${d.toFixed(1)}%`);
+    return `<div class="kpi-card">
+      <div class="kpi-label">${c.label}</div>
+      <div class="kpi-value${c.sm?' sm':''}">${c.val}</div>
+      <div class="kpi-trend ${cls}"><span>${arrow}</span><span>${lbl}</span></div>
+    </div>`;
+  }).join('');
+}
+
+/* ================================================================
+   P&L RENDER
+================================================================ */
+function renderPL() {
+  const i = SEL, p = i > 0 ? i-1 : i, hasPrev = i > 0;
+  const rows = [
+    {sec:'■ 収益'},
+    {lbl:'売上高',           cur:raw.sales[i], prv:raw.sales[p], pof:'100.0'},
+    {sec:'■ 売上原価'},
+    {lbl:'原材料費（食材費）',cur:raw.cogs[i], prv:raw.cogs[p],  pof:(raw.cogs[i]/raw.sales[i]*100).toFixed(1)},
+    {sub:true,lbl:'売上総利益（粗利）',cur:raw.gp[i],  prv:raw.gp[p],  pof:(raw.gp[i]/raw.sales[i]*100).toFixed(1)},
+    {sec:'■ 販売管理費'},
+    {lbl:'　家賃',           cur:raw.rent[i],  prv:raw.rent[p],  pof:(raw.rent[i]/raw.sales[i]*100).toFixed(1)},
+    {lbl:'　光熱費',         cur:raw.util[i],  prv:raw.util[p],  pof:(raw.util[i]/raw.sales[i]*100).toFixed(1)},
+    {lbl:'　人件費',         cur:raw.labor[i], prv:raw.labor[p], pof:(raw.labor[i]/raw.sales[i]*100).toFixed(1)},
+    {lbl:'　その他経費',     cur:raw.other[i], prv:raw.other[p], pof:(raw.other[i]/raw.sales[i]*100).toFixed(1)},
+    {sub:true,lbl:'販管費合計',cur:raw.sga[i], prv:raw.sga[p],   pof:(raw.sga[i]/raw.sales[i]*100).toFixed(1)},
+    {tot:true,lbl:'営業利益',  cur:raw.op[i],  prv:raw.op[p],    pof:(raw.op[i]/raw.sales[i]*100).toFixed(1)},
+  ];
+  let html = `<thead><tr>
+    <th style="text-align:left">項目</th>
+    <th>当月</th><th>構成比</th><th>前月比</th>
+  </tr></thead><tbody>`;
+  rows.forEach(r => {
+    if (r.sec) { html += `<tr class="pl-section"><td colspan="4">${r.sec}</td></tr>`; return; }
+    const rowCls = r.tot ? ('pl-total'+(r.cur>=0?' pl-profit':' pl-loss')) : r.sub ? 'pl-subtotal' : '';
+    const d = hasPrev ? pctDiff(r.cur, r.prv) : null;
+    const chg = d === null ? '<span class="chg-neu">—</span>'
+      : `<span class="chg-badge ${d>=0?'chg-up':'chg-down'}">${sign(d)}${d.toFixed(1)}%</span>`;
+    html += `<tr class="${rowCls}">
+      <td>${r.lbl}</td>
+      <td>${yen(r.cur)}</td>
+      <td style="color:var(--text-3)">${r.pof}%</td>
+      <td>${chg}</td>
+    </tr>`;
+  });
+  html += '</tbody>';
+  document.getElementById('plTable').innerHTML = html;
+}
+
+/* ================================================================
+   MENU RENDER
+================================================================ */
+function renderMenu() {
+  const max = menuData[0].cnt;
+  document.getElementById('menuList').innerHTML = menuData.map((m,i) => `
+    <div class="menu-row">
+      <div class="menu-rank${i<3?' gold-rank':''}">${i+1}</div>
+      <div class="menu-info">
+        <div class="menu-name">${m.name}</div>
+        <div class="menu-bar-bg"><div class="menu-bar-fill" style="width:${(m.cnt/max*100).toFixed(0)}%"></div></div>
+      </div>
+      <div class="menu-cnt">${m.cnt} 杯</div>
+    </div>`).join('');
+}
+
+/* ================================================================
+   ALERTS RENDER
+================================================================ */
+function renderAlerts() {
+  const i = SEL;
+  const achv = (raw.sales[i] / TARGET_SALES * 100).toFixed(0);
+  const cr   = raw.cogsR[i];
+  const rep  = raw.repeat[i];
+  const alerts = [
+    {
+      type: parseInt(achv)>=100 ? 'success' : 'warning',
+      icon: parseInt(achv)>=100 ? '🎯' : '📊',
+      title: `売上目標達成率 ${achv}%`,
+      text: parseInt(achv)>=100
+        ? `目標 ${yen(TARGET_SALES)} を達成！来月の目標引き上げを検討しましょう。`
+        : `目標まであと ${yen(TARGET_SALES-raw.sales[i])}。ランチ強化やSNS活用でピーク来客を増やしましょう。`,
+    },
+    {
+      type: cr<=0.30?'success':'warning',
+      icon: cr<=0.30?'✅':'⚠️',
+      title: `原価率 ${(cr*100).toFixed(1)}% — ${cr<=0.30?'良好':'やや高め'}`,
+      text: cr<=0.30
+        ? `食材費のコントロールが良好です。まとめ買い・ロス削減の継続を。`
+        : `目標原価率（30%）超過中。食材ロスの見直しや仕入れ価格交渉を検討してください。`,
+    },
+    {
+      type: rep>=55?'success':'info',
+      icon: rep>=55?'💫':'💡',
+      title: `リピート率 ${rep}% — ${rep>=55?'優秀！':'改善余地あり'}`,
+      text: rep>=55
+        ? `半数以上がリピーター。季節限定メニューやスタンプカードで常連を更に増やしましょう。`
+        : `LINE公式アカウントやポイント制度の導入でリピート率向上が期待できます。`,
+    },
+  ];
+  document.getElementById('alertGrid').innerHTML = alerts.map(a => `
+    <div class="alert-card ${a.type}">
+      <div class="alert-icon">${a.icon}</div>
+      <div><div class="alert-title">${a.title}</div><div class="alert-text">${a.text}</div></div>
+    </div>`).join('');
+}
+
+/* ================================================================
+   CHARTS
+================================================================ */
+const CC = { roast:'#3D2314', caramel:'#C4843A', terracotta:'#C4603A', sage:'#7A9B6E' };
+let charts = {};
+
+function initSalesChart() {
+  charts.sales = new Chart(document.getElementById('salesChart').getContext('2d'), {
+    type:'bar',
+    data:{
+      labels: MONTHS.map(m=>m.replace('2025年','25/').replace('2026年','26/').replace('月','')),
+      datasets:[
+        { label:'月間売上', data:raw.sales,
+          backgroundColor: raw.sales.map((_,i)=>i===SEL?CC.terracotta:CC.caramel+'99'),
+          borderRadius:6, borderSkipped:false },
+        { label:'目標 ¥600,000', data:Array(12).fill(TARGET_SALES),
+          type:'line', borderColor:CC.sage, borderWidth:1.5, borderDash:[5,4],
+          pointRadius:0, fill:false },
+      ],
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{labels:{font:{family:'Noto Sans JP',size:11},color:'#5C3A22',boxWidth:12,padding:14}},
+        tooltip:{callbacks:{label:c=>`${c.dataset.label}: ¥${c.raw.toLocaleString()}`}},
+      },
+      scales:{
+        x:{grid:{display:false},ticks:{font:{size:9,family:'DM Mono'},color:'#9B7355'}},
+        y:{grid:{color:'rgba(196,132,58,0.08)'},suggestedMin:300000,
+          ticks:{font:{size:10,family:'DM Mono'},color:'#9B7355',callback:v=>'¥'+(v/10000)+'万'}},
+      },
+    },
+  });
+}
+
+function initCategoryChart() {
+  charts.cat = new Chart(document.getElementById('categoryChart').getContext('2d'), {
+    type:'doughnut',
+    data:{
+      labels:CAT_LABELS,
+      datasets:[{data:catData[SEL],backgroundColor:CAT_COLORS,borderWidth:0,hoverOffset:8}],
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false, cutout:'70%',
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{label:c=>`${c.label}: ¥${c.raw.toLocaleString()}`}},
+      },
+    },
+  });
+  renderCatLegend();
+}
+
+function renderCatLegend() {
+  const vals  = catData[SEL];
+  const total = vals.reduce((a,b)=>a+b,0);
+  document.getElementById('catLegend').innerHTML = CAT_LABELS.map((l,i)=>`
+    <div class="cat-item">
+      <span class="cat-dot" style="background:${CAT_COLORS[i]}"></span>
+      ${l} <strong style="margin-left:2px">${(vals[i]/total*100).toFixed(0)}%</strong>
+    </div>`).join('');
+}
+
+function initHourlyChart() {
+  charts.hourly = new Chart(document.getElementById('hourlyChart').getContext('2d'), {
+    type:'bar',
+    data:{
+      labels:Array.from({length:24},(_,i)=>i+'時'),
+      datasets:[{
+        label:'来客数',
+        data:HOURLY_GUESTS,
+        backgroundColor:HOURLY_GUESTS.map(v=>v>=17?CC.terracotta:CC.caramel+'BB'),
+        borderRadius:4, borderSkipped:false,
+      }],
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{grid:{display:false},ticks:{font:{size:9,family:'DM Mono'},color:'#9B7355',maxTicksLimit:12}},
+        y:{grid:{color:'rgba(196,132,58,0.08)'},ticks:{font:{size:10,family:'DM Mono'},color:'#9B7355'}},
+      },
+    },
+  });
+}
+
+function initWeekdayChart() {
+  charts.wd = new Chart(document.getElementById('weekdayChart').getContext('2d'), {
+    type:'bar',
+    data:{
+      labels:['月','火','水','木','金','土','日'],
+      datasets:[{
+        label:'売上（千円）',
+        data:WEEKDAY_BASE,
+        backgroundColor:WEEKDAY_BASE.map((_,i)=>i>=5?CC.terracotta:CC.caramel+'BB'),
+        borderRadius:6, borderSkipped:false,
+      }],
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false},
+        tooltip:{callbacks:{label:c=>`売上: ¥${(c.raw*1000).toLocaleString()}`}}},
+      scales:{
+        x:{grid:{display:false},ticks:{font:{size:12,family:'Noto Sans JP'},color:'#9B7355'}},
+        y:{grid:{color:'rgba(196,132,58,0.08)'},ticks:{font:{size:10,family:'DM Mono'},color:'#9B7355',callback:v=>v+'k'}},
+      },
+    },
+  });
+}
+
+function updateCharts() {
+  charts.sales.data.datasets[0].data = raw.sales;
+  charts.sales.data.datasets[0].backgroundColor = raw.sales.map((_,i)=>i===SEL?CC.terracotta:CC.caramel+'99');
+  charts.sales.update();
+  charts.cat.data.datasets[0].data = catData[SEL];
+  charts.cat.update();
+  renderCatLegend();
+}
+
+/* ================================================================
+   CSV PARSING
+================================================================ */
+/* freee CSV format (月次P&L):
+   年月,売上高,原材料費,家賃,光熱費,人件費,その他経費,リピート率
+   2025-05,420000,142800,150000,38000,120000,28000,42
+*/
+function parseFreeeCSV(csvText) {
+  const result = Papa.parse(csvText.trim(), { header:true, skipEmptyLines:true });
+  const rows   = result.data;
+  if (!rows.length) throw new Error('データが空です');
+  const required = ['年月','売上高','原材料費','家賃','光熱費','人件費','その他経費'];
+  const missing  = required.filter(k => !(k in rows[0]));
+  if (missing.length) throw new Error(`列が不足しています: ${missing.join(', ')}`);
+
+  const out = { sales:[], cogsR:[], rent:[], util:[], labor:[], other:[], repeat:[] };
+  rows.forEach(r => {
+    const s = parseInt(r['売上高'])||0;
+    const c = parseInt(r['原材料費'])||0;
+    out.sales.push(s);
+    out.cogsR.push(s > 0 ? c/s : 0.30);
+    out.rent.push(parseInt(r['家賃'])||150000);
+    out.util.push(parseInt(r['光熱費'])||0);
+    out.labor.push(parseInt(r['人件費'])||0);
+    out.other.push(parseInt(r['その他経費'])||0);
+    out.repeat.push(parseInt(r['リピート率'])||50);
+  });
+  return out;
+}
+
+/* USEN CSV format (月次売上・来客・メニュー):
+   Section 1 – 月次サマリー (header: 年月,来客数)
+   2025-05,304
+   ...
+   (blank line)
+   Section 2 – メニューランキング (header: 商品名,販売数)
+   ブレンドコーヒー,387
+   ...
+*/
+function parseUsenCSV(csvText) {
+  const lines = csvText.trim().split('\n').map(l => l.trim());
+  const blankIdx = lines.findIndex((l,i) => i>0 && l === '');
+
+  // Section 1: monthly guests
+  const sec1Lines = blankIdx > 0 ? lines.slice(0, blankIdx) : lines;
+  const sec1 = Papa.parse(sec1Lines.join('\n'), { header:true, skipEmptyLines:true }).data;
+  const guests = sec1.map(r => parseInt(r['来客数'])||0);
+
+  // Section 2: menu ranking
+  let menuItems = [];
+  if (blankIdx > 0 && blankIdx < lines.length - 1) {
+    const sec2Lines = lines.slice(blankIdx + 1);
+    const sec2 = Papa.parse(sec2Lines.join('\n'), { header:true, skipEmptyLines:true }).data;
+    menuItems = sec2.map(r => ({ name: r['商品名']||'', cnt: parseInt(r['販売数'])||0 }))
+                    .filter(m => m.name && m.cnt > 0)
+                    .sort((a,b) => b.cnt - a.cnt)
+                    .slice(0,10);
+  }
+  return { guests, menuItems };
+}
+
+/* ================================================================
+   APPLY DATA
+================================================================ */
+function applyData() {
+  const hasFreee = staged.freee !== null;
+  const hasUsen  = staged.usen  !== null;
+
+  // Build new raw from demo + overrides
+  const base = {
+    sales:  [...DEMO.sales],
+    cogsR:  [...DEMO.cogsR],
+    rent:   [...DEMO.rent],
+    util:   [...DEMO.util],
+    labor:  [...DEMO.labor],
+    other:  [...DEMO.other],
+    repeat: [...DEMO.repeat],
+    guests: [...DEMO.guests],
+  };
+
+  if (hasFreee) {
+    const f = staged.freee;
+    const len = Math.min(f.sales.length, 12);
+    for (let i = 0; i < len; i++) {
+      if (f.sales[i])  base.sales[i]  = f.sales[i];
+      if (f.cogsR[i])  base.cogsR[i]  = f.cogsR[i];
+      if (f.rent[i])   base.rent[i]   = f.rent[i];
+      if (f.util[i])   base.util[i]   = f.util[i];
+      if (f.labor[i])  base.labor[i]  = f.labor[i];
+      if (f.other[i])  base.other[i]  = f.other[i];
+      if (f.repeat[i]) base.repeat[i] = f.repeat[i];
+    }
+  }
+  if (hasUsen) {
+    const u = staged.usen;
+    const len = Math.min(u.guests.length, 12);
+    for (let i = 0; i < len; i++) {
+      if (u.guests[i]) base.guests[i] = u.guests[i];
+    }
+    if (u.menuItems.length) menuData = u.menuItems;
+  }
+
+  raw      = buildRaw(base);
+  catData  = buildCatData(raw.sales, DEMO_CAT_RATIOS);
+  isLiveData = hasFreee || hasUsen;
+
+  refreshAll();
+  updateDataModeUI();
+  closeCsvModal();
+
+  // Persist to localStorage
+  try { localStorage.setItem('cafe_data', JSON.stringify({ base, menuData })); } catch(e) {}
+}
+
+function resetToDemo() {
+  raw       = buildRaw(DEMO);
+  catData   = buildCatData(DEMO.sales, DEMO_CAT_RATIOS);
+  menuData  = DEMO_MENU;
+  isLiveData = false;
+  staged     = { freee: null, usen: null };
+  try { localStorage.removeItem('cafe_data'); } catch(e) {}
+  refreshAll();
+  updateDataModeUI();
+  updateZoneUI();
+  closeCsvModal();
+}
+
+function refreshAll() {
+  document.getElementById('currentLabel').textContent = MONTHS[SEL];
+  renderKPIs();
+  renderPL();
+  renderMenu();
+  renderAlerts();
+  updateCharts();
+}
+
+function updateDataModeUI() {
+  const tag = document.getElementById('dataModeBadge');
+  const fl  = document.getElementById('freeeLabel');
+  const ul  = document.getElementById('usenLabel');
+  const note= document.getElementById('modalDemoNote');
+  if (isLiveData) {
+    tag.textContent = '実データ';
+    tag.className   = 'data-mode-tag live';
+    fl.textContent  = staged.freee ? 'freee（CSV読込済）' : 'freee（ダミー）';
+    ul.textContent  = staged.usen  ? 'USENレジ（CSV読込済）' : 'USENレジ（ダミー）';
+    note.textContent = 'CSVデータを反映中です';
+  } else {
+    tag.textContent = 'ダミーデータ';
+    tag.className   = 'data-mode-tag demo';
+    fl.textContent  = 'freee（ダミー）';
+    ul.textContent  = 'USENレジ（ダミー）';
+    note.textContent = '現在はダミーデータを表示中です';
+  }
+}
+
+/* ================================================================
+   TEMPLATE CSV DOWNLOAD
+================================================================ */
+function downloadCSV(filename, content) {
+  const blob = new Blob(['﻿'+content], {type:'text/csv;charset=utf-8;'});
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+}
+
+const FREEE_TEMPLATE = `年月,売上高,原材料費,家賃,光熱費,人件費,その他経費,リピート率
+2025-05,420000,142800,150000,38000,120000,28000,42
+2025-06,523000,167360,150000,40000,138000,30000,45
+2025-07,581000,180110,150000,43000,145000,31000,48
+2025-08,647000,194100,150000,48000,158000,32000,51
+2025-09,558000,178560,150000,44000,142000,29000,50
+2025-10,624000,187200,150000,41000,150000,33000,53
+2025-11,592000,183520,150000,43000,140000,30000,52
+2025-12,718000,208220,150000,46000,168000,35000,55
+2026-01,484000,159720,150000,50000,128000,28000,49
+2026-02,517000,165440,150000,47000,135000,29000,51
+2026-03,651000,188790,150000,42000,163000,34000,57
+2026-04,682000,204600,150000,42000,165000,35000,58
+`;
+
+const USEN_TEMPLATE = `年月,来客数
+2025-05,304
+2025-06,381
+2025-07,421
+2025-08,462
+2025-09,395
+2025-10,443
+2025-11,408
+2025-12,487
+2026-01,337
+2026-02,362
+2026-03,476
+2026-04,498
+
+商品名,販売数
+ブレンドコーヒー,387
+カフェラテ,312
+モーニングセット,248
+カプチーノ,221
+チーズケーキ,198
+アイスコーヒー,187
+カフェモカ,165
+バゲットサンド,143
+ティラミス,128
+アールグレイ,112
+`;
+
+/* ================================================================
+   MODAL & FILE UPLOAD
+================================================================ */
+function openCsvModal()  { document.getElementById('csvModal').classList.add('open'); }
+function closeCsvModal() { document.getElementById('csvModal').classList.remove('open'); }
+
+function updateZoneUI() {
+  document.getElementById('freeeZone').className = 'upload-zone' + (staged.freee ? ' done' : '');
+  document.getElementById('usenZone').className  = 'upload-zone' + (staged.usen  ? ' done' : '');
+  document.getElementById('freeeStatus').textContent = staged.freee ? '✓ 読み込み済み' : '';
+  document.getElementById('usenStatus').textContent  = staged.usen  ? '✓ 読み込み済み' : '';
+}
+
+function setupFileInput(inputId, zoneId, parser, key) {
+  const input = document.getElementById(inputId);
+  const zone  = document.getElementById(zoneId);
+
+  input.addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        staged[key] = parser(ev.target.result);
+        updateZoneUI();
+      } catch(err) {
+        alert(`CSVの読み込みに失敗しました。\nテンプレート形式を確認してください。\n\n${err.message}`);
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
+    input.value = '';
+  });
+
+  // Drag & drop
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave',() => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        staged[key] = parser(ev.target.result);
+        updateZoneUI();
+      } catch(err) {
+        alert(`CSVの読み込みに失敗しました。\nテンプレート形式を確認してください。\n\n${err.message}`);
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
+  });
+}
+
+/* ================================================================
+   LOAD FROM LOCALSTORAGE
+================================================================ */
+function loadFromStorage() {
+  try {
+    const saved = localStorage.getItem('cafe_data');
+    if (!saved) return;
+    const { base, menuData: savedMenu } = JSON.parse(saved);
+    raw      = buildRaw(base);
+    catData  = buildCatData(raw.sales, DEMO_CAT_RATIOS);
+    menuData = savedMenu;
+    isLiveData = true;
+    updateDataModeUI();
+  } catch(e) { /* ignore */ }
+}
+
+/* ================================================================
+   INIT
+================================================================ */
+document.addEventListener('DOMContentLoaded', () => {
+  loadFromStorage();
+
+  renderKPIs();
+  renderPL();
+  renderMenu();
+  renderAlerts();
+  initSalesChart();
+  initCategoryChart();
+  initHourlyChart();
+  initWeekdayChart();
+
+  // Month selector
+  document.getElementById('monthSelect').addEventListener('change', e => {
+    SEL = parseInt(e.target.value);
+    refreshAll();
+  });
+
+  // View toggle
+  document.getElementById('btnMonthly').addEventListener('click', () => {
+    document.getElementById('btnMonthly').classList.add('active');
+    document.getElementById('btnWeekly').classList.remove('active');
+  });
+  document.getElementById('btnWeekly').addEventListener('click', () => {
+    document.getElementById('btnWeekly').classList.add('active');
+    document.getElementById('btnMonthly').classList.remove('active');
+  });
+
+  // CSV Modal
+  document.getElementById('csvOpenBtn').addEventListener('click',  openCsvModal);
+  document.getElementById('csvCloseBtn').addEventListener('click', closeCsvModal);
+  document.getElementById('csvModal').addEventListener('click', e => {
+    if (e.target === document.getElementById('csvModal')) closeCsvModal();
+  });
+  document.getElementById('csvApplyBtn').addEventListener('click', applyData);
+  document.getElementById('csvResetBtn').addEventListener('click', resetToDemo);
+
+  // Template downloads
+  document.getElementById('tplFreee').addEventListener('click', () => downloadCSV('freee_pl_template.csv', FREEE_TEMPLATE));
+  document.getElementById('tplUsen').addEventListener('click',  () => downloadCSV('usen_sales_template.csv', USEN_TEMPLATE));
+
+  // File inputs
+  setupFileInput('freeeFile', 'freeeZone', parseFreeeCSV, 'freee');
+  setupFileInput('usenFile',  'usenZone',  parseUsenCSV,  'usen');
+
+  updateZoneUI();
+  updateDataModeUI();
+});
+</script>
+</body>
+</html>

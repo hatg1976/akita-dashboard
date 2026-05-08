@@ -2881,51 +2881,139 @@ def page_industry_matrix():
         except Exception:
             return 0
 
-    df_display = df_pivot.copy()
-    df_display["合計"] = df_display.apply(
-        lambda row: sum(_to_int(v) for v in row), axis=1
-    )
+    # ---- スライサー ----
+    all_industries  = list(df_pivot.index)
+    all_cities      = list(df_pivot.columns)
 
-    # 縦の合計行（市区町村ごとの産業合計）を追加
-    col_sums = {col: df_display[col].apply(_to_int).sum() for col in df_display.columns}
+    with st.expander("🔍 絞り込み（スライサー）", expanded=False):
+        sel_cities = st.multiselect(
+            "市町村を選択（空欄 = すべて）",
+            options=all_cities,
+            default=[],
+            placeholder="すべての市町村を表示中",
+        )
+        sel_industries = st.multiselect(
+            "業種を選択（空欄 = すべて）",
+            options=all_industries,
+            default=[],
+            placeholder="すべての業種を表示中",
+        )
+
+    # フィルター適用
+    row_sel = sel_industries if sel_industries else all_industries
+    col_sel = sel_cities    if sel_cities    else all_cities
+    df_base = df_pivot.loc[row_sel, col_sel].copy()
+
+    # ---- 合計列・合計行を付加 ----
+    df_base["合計"] = df_base.apply(lambda row: sum(_to_int(v) for v in row), axis=1)
+    col_sums = {col: df_base[col].apply(_to_int).sum() for col in df_base.columns}
     total_row = pd.DataFrame([col_sums], index=["合計"])
-    df_display = pd.concat([df_display, total_row])
+    df_display = pd.concat([df_base, total_row])
 
-    # 総事業所数メトリクス
-    total_est = int(col_sums["合計"])
-    st.metric("秋田県 総事業所数（民営）", f"{total_est:,} 所")
+    grand_total = int(col_sums["合計"])
 
+    # ---- メトリクス ----
+    m1, m2, m3 = st.columns(3)
+    m1.metric("表示対象 総事業所数", f"{grand_total:,} 所")
+    m2.metric("表示業種数", f"{len(row_sel)} 業種")
+    m3.metric("表示市町村数", f"{len(col_sel)} 市町村")
+
+    st.markdown("---")
     st.markdown("#### 産業大分類 × 市町村 事業所数マトリックス")
 
-    # "-" セルをグレー表示、合計行を太字表示
-    def _style_cell(val, row_label=""):
-        if val == "-":
-            return "color: #aaaaaa; background-color: #f5f5f5;"
-        return ""
+    tab_count, tab_pct = st.tabs(["📊 事業所数（実数）", "📈 構成比（%）"])
 
-    def _style_row(row):
+    # ---- スタイル関数 ----
+    def _style_count_row(row):
         if row.name == "合計":
             return ["font-weight: bold; background-color: #e8f0fe;" for _ in row]
         return ["" for _ in row]
 
-    styled = (
-        df_display.style
-        .apply(_style_row, axis=1)
-        .map(_style_cell)
-        .format(lambda v: v if isinstance(v, str) else f"{v:,}")
-        .set_table_styles([
-            {"selector": "th", "props": [("font-size", "11px"), ("white-space", "nowrap")]},
-            {"selector": "td", "props": [("font-size", "11px"), ("text-align", "right")]},
-        ])
-    )
+    def _style_count_cell(val):
+        if val == "-":
+            return "color: #aaaaaa; background-color: #f5f5f5;"
+        return ""
 
-    st.dataframe(styled, use_container_width=True, height=min(50 + len(df_display) * 35, 700))
+    # ---- タブ①：実数 ----
+    with tab_count:
+        styled_count = (
+            df_display.style
+            .apply(_style_count_row, axis=1)
+            .map(_style_count_cell)
+            .format(lambda v: v if isinstance(v, str) else f"{v:,}")
+            .set_table_styles([
+                {"selector": "th", "props": [("font-size", "11px"), ("white-space", "nowrap")]},
+                {"selector": "td", "props": [("font-size", "11px"), ("text-align", "right")]},
+            ])
+        )
+        st.dataframe(styled_count, use_container_width=True, height=min(50 + len(df_display) * 35, 700))
+        st.caption("「-」は秘匿処理または事業所なし　※農林漁業は農林業センサスベースのため除外")
 
-    st.caption("「-」は秘匿処理または事業所なし　※農林漁業は個人農家を含む農林業センサスベースの計上のため除外しています")
+    # ---- タブ②：構成比 ----
+    with tab_pct:
+        pct_mode = st.radio(
+            "割合の基準",
+            ["全体（県全体合計を分母）", "行（業種）合計を分母", "列（市町村）合計を分母"],
+            horizontal=True,
+            label_visibility="collapsed",
+        )
 
-    # CSVダウンロード
+        # 数値マトリックスを作成（"-" → 0）
+        df_num = df_display.apply(lambda col: col.map(_to_int))
+
+        if pct_mode == "全体（県全体合計を分母）":
+            denom = grand_total if grand_total > 0 else 1
+            df_pct = df_num / denom * 100
+        elif pct_mode == "行（業種）合計を分母":
+            row_totals = df_num["合計"].replace(0, 1)
+            df_pct = df_num.div(row_totals, axis=0) * 100
+        else:  # 列（市町村）合計
+            col_totals = df_num.loc["合計"].replace(0, 1)
+            df_pct = df_num.div(col_totals, axis=1) * 100
+
+        def _fmt_pct(v):
+            if v == 0:
+                return "-"
+            return f"{v:.1f}%"
+
+        def _style_pct_row(row):
+            if row.name == "合計":
+                return ["font-weight: bold; background-color: #e8f0fe;" for _ in row]
+            return ["" for _ in row]
+
+        def _style_pct_cell(val):
+            if val == "-":
+                return "color: #aaaaaa; background-color: #f5f5f5;"
+            try:
+                f = float(str(val).replace("%", ""))
+                if f >= 20:
+                    return "background-color: #1f4e79; color: white;"
+                elif f >= 10:
+                    return "background-color: #2e75b6; color: white;"
+                elif f >= 5:
+                    return "background-color: #9dc3e6;"
+                elif f >= 1:
+                    return "background-color: #deeaf1;"
+            except Exception:
+                pass
+            return ""
+
+        styled_pct = (
+            df_pct.style
+            .apply(_style_pct_row, axis=1)
+            .map(_style_pct_cell)
+            .format(_fmt_pct)
+            .set_table_styles([
+                {"selector": "th", "props": [("font-size", "11px"), ("white-space", "nowrap")]},
+                {"selector": "td", "props": [("font-size", "11px"), ("text-align", "right")]},
+            ])
+        )
+        st.dataframe(styled_pct, use_container_width=True, height=min(50 + len(df_display) * 35, 700))
+        st.caption("色が濃いほど割合が高い（濃青≥20%、青≥10%、水色≥5%、薄水色≥1%）")
+
+    # ---- CSVダウンロード ----
     st.download_button(
-        "📥 CSVダウンロード",
+        "📥 CSVダウンロード（実数）",
         df_display.to_csv(encoding="utf-8-sig"),
         "industry_municipal_matrix.csv",
         mime="text/csv",
@@ -2933,14 +3021,12 @@ def page_industry_matrix():
 
     st.markdown("---")
 
-    # 市区町村別合計棒グラフ（上位10）
-    # 「合計」行は各産業の合計なので除外して集計（二重計上を防ぐ）
-    df_industries = df_display.drop(index="合計", errors="ignore")
+    # ---- 市区町村別合計棒グラフ（上位10）----
+    df_no_total = df_display.drop(index="合計", errors="ignore")
     city_totals: dict[str, int] = {
-        col: df_industries[col].apply(_to_int).sum()
+        col: df_no_total[col].apply(_to_int).sum()
         for col in df_display.columns if col != "合計"
     }
-
     top_cities = sorted(city_totals.items(), key=lambda x: x[1], reverse=True)[:10]
     if top_cities:
         st.markdown("#### 市区町村別 事業所数（上位10）")

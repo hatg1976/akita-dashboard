@@ -120,6 +120,16 @@ def get_sample_population() -> pd.DataFrame:
     return pd.DataFrame(data)
 
 
+def get_national_population() -> pd.DataFrame:
+    """全国の人口推移データ（国勢調査・人口推計ベース）"""
+    data = {
+        "年": [1990, 1995, 2000, 2005, 2010, 2015, 2020, 2023],
+        # 出典: 総務省統計局 国勢調査・人口推計（単位: 万人）
+        "総人口（万人）": [12361, 12557, 12693, 12777, 12806, 12709, 12615, 12435],
+    }
+    return pd.DataFrame(data)
+
+
 def get_sample_migration() -> pd.DataFrame:
     """秋田県の転入・転出サンプルデータ"""
     data = {

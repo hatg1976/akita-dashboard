@@ -14,6 +14,7 @@ import estat_api
 import market_data
 from collector import (
     get_sample_population,
+    get_national_population,
     get_sample_migration,
     get_sample_industry,
     get_sample_economy,
@@ -229,14 +230,34 @@ def page_overview():
 
     with col_left:
         st.subheader("人口推移")
-        df_pop = get_sample_population()
-        fig = px.line(
-            df_pop, x="年", y="総人口（万人）",
-            markers=True,
-            title="秋田県 総人口の推移",
-            color_discrete_sequence=["#1f4e79"],
+        df_pop     = get_sample_population()
+        df_nat_pop = get_national_population()
+        fig = go.Figure()
+        # 左軸：秋田県
+        fig.add_trace(go.Scatter(
+            x=df_pop["年"], y=df_pop["総人口（万人）"],
+            name="秋田県（左軸）", mode="lines+markers",
+            line=dict(color="#1f4e79", width=2),
+            marker=dict(size=6),
+            yaxis="y1",
+        ))
+        # 右軸：全国
+        fig.add_trace(go.Scatter(
+            x=df_nat_pop["年"], y=df_nat_pop["総人口（万人）"],
+            name="全国（右軸）", mode="lines+markers",
+            line=dict(color="#e05a24", width=2, dash="dot"),
+            marker=dict(size=6),
+            yaxis="y2",
+        ))
+        fig.update_layout(
+            height=300,
+            title="秋田県 vs 全国 総人口の推移",
+            legend=dict(orientation="h", y=-0.25, x=0),
+            yaxis=dict(title="秋田県（万人）", color="#1f4e79", tickformat=","),
+            yaxis2=dict(title="全国（万人）", color="#e05a24",
+                        tickformat=",", overlaying="y", side="right"),
+            margin=dict(t=40, b=60, r=60),
         )
-        fig.update_layout(height=300)
         st.plotly_chart(fig, use_container_width=True)
 
     with col_right:

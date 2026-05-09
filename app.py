@@ -253,9 +253,10 @@ def page_overview():
             height=300,
             title="秋田県 vs 全国 総人口の推移",
             legend=dict(orientation="h", y=-0.25, x=0),
-            yaxis=dict(title="秋田県（万人）", color="#1f4e79", tickformat=","),
+            yaxis=dict(title="秋田県（万人）", color="#1f4e79",
+                       tickformat=",", rangemode="tozero"),
             yaxis2=dict(title="全国（万人）", color="#e05a24",
-                        tickformat=",", overlaying="y", side="right"),
+                        tickformat=",", overlaying="y", side="right", rangemode="tozero"),
             margin=dict(t=40, b=60, r=60),
         )
         st.plotly_chart(fig, use_container_width=True)

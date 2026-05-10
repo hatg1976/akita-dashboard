@@ -7,7 +7,9 @@
       "Bash(cmd.exe /c \"where claude 2>nul\")",
       "Bash(cmd.exe /c \"where claude\")",
       "Bash(echo \"exit: $?\")",
-      "Bash(pip install *)"
+      "Bash(pip install *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }

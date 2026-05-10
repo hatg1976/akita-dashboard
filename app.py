@@ -143,7 +143,6 @@ page = st.sidebar.selectbox(
      "🔗 川上・川下フロー分析",
      "🗾 東北4県比較", "🏘️ 市町村比較",
      "📈 地域市場シェア分析",
-     "💹 決算書図解ツール",
      "🏛️ 政策提言", "💴 補助金カレンダー",
      "🔌 e-Stat API連携"],
 )
@@ -3790,6 +3789,3 @@ elif page == "💴 補助金カレンダー":
     page_subsidies()
 elif page == "🔌 e-Stat API連携":
     page_estat()
-elif page == "💹 決算書図解ツール":
-    from financial_diagram import page_financial
-    page_financial()

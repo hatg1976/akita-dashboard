@@ -1,0 +1,26 @@
+name: HF Spaces 同期
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'data/**'
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Hugging Face Spaces にプッシュ
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git push --force \
+            https://HIDEAKITANIGUCHI:$HF_TOKEN@huggingface.co/spaces/HIDEAKITANIGUCHI/akita-dashboard \
+            main

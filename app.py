@@ -587,8 +587,8 @@ def page_industry_analysis():
                 fig.update_layout(
                     title=f"{selected} — 5年間の推移",
                     height=340,
-                    yaxis=dict(title="売上額（億円）"),
-                    yaxis2=dict(title="従業員（百人）", overlaying="y", side="right"),
+                    yaxis=dict(title="売上額（億円）", rangemode="tozero"),
+                    yaxis2=dict(title="従業員（百人）", overlaying="y", side="right", rangemode="tozero"),
                     legend=dict(orientation="h", y=-0.2),
                 )
                 st.plotly_chart(fig, use_container_width=True)
@@ -1013,8 +1013,8 @@ def page_industry_detail():
         ))
         fig.update_layout(
             title=f"{industry_key} — 5年間の推移", height=340,
-            yaxis=dict(title="売上額（億円）"),
-            yaxis2=dict(title="従業員（百人）", overlaying="y", side="right"),
+            yaxis=dict(title="売上額（億円）", rangemode="tozero"),
+            yaxis2=dict(title="従業員（百人）", overlaying="y", side="right", rangemode="tozero"),
             legend=dict(orientation="h", y=-0.2),
         )
         st.plotly_chart(fig, use_container_width=True)

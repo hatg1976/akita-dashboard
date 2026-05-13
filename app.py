@@ -144,6 +144,7 @@ page = st.sidebar.selectbox(
      "🗾 東北4県比較", "🏘️ 市町村比較",
      "📈 地域市場シェア分析",
      "🏛️ 政策提言", "💴 補助金カレンダー",
+     "🏢 組織成熟度診断",
      "🔌 e-Stat API連携"],
 )
 
@@ -3757,6 +3758,257 @@ _VALUE_CHAIN_DATA: dict = {}   # 旧データ（未使用・互換性維持）
 
 
 
+# ============================================================
+# 組織成熟度診断ページ
+# ============================================================
+
+def page_maturity_diagnosis():
+    st.title("🏢 組織成熟度診断")
+    st.markdown("経営管理の現状を5項目でチェックし、組織の成熟度と財務状況を可視化します。")
+    st.markdown("---")
+
+    # ── 診断項目 ──────────────────────────────────────────────
+    ITEMS = [
+        {
+            "label": "① 計画・目標",
+            "checks": [
+                "事業計画・収支予算はあるか",
+                "プロセス目標（KPI）はあるか",
+                "目標を立てただけになっていないか（機能しているか）",
+            ],
+        },
+        {
+            "label": "② 業務手順書",
+            "checks": [
+                "コア業務についての手順書やチェックリストがあるか",
+                "担当者任せにせず、品質にバラつきがないか",
+                "手順書が形骸化していないか",
+            ],
+        },
+        {
+            "label": "③ 状況の見える化",
+            "checks": [
+                "月次の試算表が翌月上旬にできているか",
+                "KPIに対する実績が日常的にわかる状態になっているか",
+            ],
+        },
+        {
+            "label": "④ 定期的な振り返り",
+            "checks": [
+                "定期的に目標と実績の差異を比較する機会があるか",
+                "振り返りにより改善すべき課題が抽出されているか",
+            ],
+        },
+        {
+            "label": "⑤ 改善のしくみ",
+            "checks": [
+                "抽出された課題に対して改善策が検討されているか",
+                "改善策を行動に反映させるしくみがあるか",
+                "手順書に手直しが加えられているか",
+            ],
+        },
+    ]
+
+    SCORE_LABELS = {"ある（十分）": 2, "不十分": 1, "ない": 0}
+
+    st.subheader("STEP 1｜組織成熟度チェック")
+    st.caption("各項目について最も近い状態を選んでください（ある＝2点、不十分＝1点、ない＝0点）")
+
+    scores = []
+    for item in ITEMS:
+        with st.expander(item["label"], expanded=True):
+            st.caption("チェックポイント：\n" + "\n".join(f"□ {c}" for c in item["checks"]))
+            val = st.radio(
+                "評価",
+                list(SCORE_LABELS.keys()),
+                index=1,
+                key=f"maturity_{item['label']}",
+                horizontal=True,
+                label_visibility="collapsed",
+            )
+            scores.append(SCORE_LABELS[val])
+
+    total = sum(scores)
+
+    # 成熟度ランク判定
+    if total >= 9:
+        rank, rank_label, rank_color = "a", "継続的な改善が生まれ続けている状態", "#1b5e20"
+    elif total >= 7:
+        rank, rank_label, rank_color = "b", "経営管理を行い、改善が生まれている状態", "#388e3c"
+    elif total >= 5:
+        rank, rank_label, rank_color = "c", "経営管理を行っているが、まだ不十分な状態", "#f9a825"
+    elif total >= 3:
+        rank, rank_label, rank_color = "d", "経営管理の実行が不十分で、機能していない状態", "#e65100"
+    else:
+        rank, rank_label, rank_color = "e", "経営状況が分からず、何が問題かもわからない状態", "#b71c1c"
+
+    st.markdown("---")
+    st.subheader("STEP 2｜財務状況の確認")
+    col1, col2 = st.columns(2)
+    with col1:
+        cf_ok = st.radio(
+            "当期純利益＋減価償却費　vs　返済額",
+            ["≧ 返済額（返済可能）", "＜ 返済額（返済困難）"],
+            key="fin_cf",
+        )
+    with col2:
+        equity_ok = st.radio(
+            "純資産",
+            ["≧ ０（債務超過なし）", "＜ ０（債務超過）"],
+            key="fin_equity",
+        )
+    resche = st.checkbox("金融機関へのリスケ済み（借入返済猶予中）", key="fin_resche")
+
+    # 財務区分
+    cf_positive = cf_ok.startswith("≧")
+    eq_positive = equity_ok.startswith("≧")
+    if cf_positive and eq_positive:
+        fin_rank, fin_label, fin_color = "Ⅳ", "良好（返済可能・純資産プラス）", "#1b5e20"
+    elif not cf_positive and eq_positive:
+        fin_rank, fin_label, fin_color = "Ⅲ", "要注意（返済困難・純資産プラス）", "#f9a825"
+    elif cf_positive and not eq_positive:
+        fin_rank, fin_label, fin_color = "Ⅱ", "要注意（返済可能・債務超過）", "#e65100"
+    else:
+        fin_rank, fin_label, fin_color = "Ⅰ", "危機的（返済困難・債務超過）", "#b71c1c"
+
+    st.markdown("---")
+    st.subheader("📊 診断結果")
+
+    res_col1, res_col2 = st.columns(2)
+    with res_col1:
+        st.metric("組織成熟度スコア", f"{total} / 10点", delta=None)
+        st.markdown(
+            f"<div style='padding:12px;border-radius:8px;background:{rank_color}22;border-left:4px solid {rank_color}'>"
+            f"<b style='color:{rank_color}'>ランク {rank.upper()}：{total}点</b><br>{rank_label}</div>",
+            unsafe_allow_html=True,
+        )
+    with res_col2:
+        st.metric("財務状況区分", fin_rank)
+        flag = "　⚠️ リスケ済み" if resche else ""
+        st.markdown(
+            f"<div style='padding:12px;border-radius:8px;background:{fin_color}22;border-left:4px solid {fin_color}'>"
+            f"<b style='color:{fin_color}'>区分 {fin_rank}：{fin_label}</b>{flag}</div>",
+            unsafe_allow_html=True,
+        )
+
+    # ── マトリックス可視化 ──────────────────────────────────
+    st.markdown("---")
+    st.subheader("📈 ポジショニングマトリックス")
+
+    fin_x = {"Ⅰ": 1, "Ⅱ": 2, "Ⅲ": 3, "Ⅳ": 4}[fin_rank]
+
+    fig = go.Figure()
+
+    # 背景色ゾーン（4象限）
+    zone_colors = [
+        # (x0, x1, y0, y1, color, label)
+        (0.5, 2.5, 0, 5, "rgba(183,28,28,0.08)", ""),
+        (2.5, 4.5, 0, 5, "rgba(249,168,37,0.08)", ""),
+        (0.5, 2.5, 5, 10, "rgba(249,168,37,0.08)", ""),
+        (2.5, 4.5, 5, 10, "rgba(27,94,32,0.08)", ""),
+    ]
+    for x0, x1, y0, y1, color, _ in zone_colors:
+        fig.add_shape(type="rect", x0=x0, x1=x1, y0=y0, y1=y1,
+                      fillcolor=color, line_width=0, layer="below")
+
+    # ゾーンラベル
+    fig.add_annotation(x=1.5, y=2.5, text="危機ゾーン", font=dict(color="#b71c1c", size=11), showarrow=False)
+    fig.add_annotation(x=3.5, y=2.5, text="財務優先ゾーン", font=dict(color="#e65100", size=11), showarrow=False)
+    fig.add_annotation(x=1.5, y=7.5, text="組織改善ゾーン", font=dict(color="#e65100", size=11), showarrow=False)
+    fig.add_annotation(x=3.5, y=7.5, text="成長ゾーン", font=dict(color="#1b5e20", size=11), showarrow=False)
+
+    # 企業プロット
+    fig.add_trace(go.Scatter(
+        x=[fin_x], y=[total],
+        mode="markers+text",
+        marker=dict(size=22, color=rank_color, symbol="star",
+                    line=dict(color="white", width=2)),
+        text=["貴社"],
+        textposition="top center",
+        textfont=dict(size=13, color=rank_color),
+        name="診断結果",
+    ))
+
+    fig.update_layout(
+        height=420,
+        xaxis=dict(
+            title="財務状況",
+            tickvals=[1, 2, 3, 4],
+            ticktext=["Ⅰ 危機的", "Ⅱ 要注意\n(債務超過)", "Ⅲ 要注意\n(CF不足)", "Ⅳ 良好"],
+            range=[0.5, 4.5],
+            showgrid=True, gridcolor="#eeeeee",
+        ),
+        yaxis=dict(
+            title="組織成熟度スコア（点）",
+            range=[0, 10],
+            showgrid=True, gridcolor="#eeeeee",
+            dtick=2,
+        ),
+        plot_bgcolor="white",
+        margin=dict(t=20, b=60, l=60, r=20),
+        showlegend=False,
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    # ── アドバイス ────────────────────────────────────────────
+    st.markdown("---")
+    st.subheader("💡 優先して取り組むべきこと")
+
+    advice_map = {
+        ("e", "Ⅰ"): "まず月次試算表の整備と資金繰り表の作成を最優先に。外部専門家（中小企業診断士・税理士）への相談を強く推奨します。",
+        ("e", "Ⅱ"): "財務は黒字基調ですが、経営管理が機能していません。事業計画の策定と月次モニタリングの仕組みを作ることが急務です。",
+        ("e", "Ⅲ"): "売上・利益は出ていますが、見える化がなければ持続できません。KPI設定と月次振り返りの習慣化から始めましょう。",
+        ("e", "Ⅳ"): "財務は良好。今こそ組織の仕組み化に投資する好機です。手順書整備とKPI管理から着手しましょう。",
+        ("d", "Ⅰ"): "財務改善と同時に、業務手順の最低限の文書化に着手してください。一つのコア業務から始めることを推奨します。",
+        ("d", "Ⅱ"): "手順書の整備と月次決算の早期化に取り組みましょう。債務超過の解消に向けた財務計画も同時進行で。",
+        ("d", "Ⅲ"): "経営管理の基盤が弱い状態。手順書整備と月次振り返りを定着させ、CF改善につなげることが重要です。",
+        ("d", "Ⅳ"): "財務は安定。業務手順書の整備とKPI管理を進め、組織力を高めましょう。",
+        ("c", "Ⅰ"): "財務危機の中でも組織の基盤はあります。資金繰りを最優先にしながら、見える化による早期異常検知を強化してください。",
+        ("c", "Ⅱ"): "手順書はあるが活用しきれていません。財務改善と並行して、振り返り会議の定例化に取り組みましょう。",
+        ("c", "Ⅲ"): "組織管理はある程度機能しています。CF不足の原因を月次で追跡し、改善アクションを明確化しましょう。",
+        ("c", "Ⅳ"): "財務・組織ともに中間段階。KPIの精度向上と改善サイクルの仕組み化で次のステージへ進めます。",
+        ("b", "Ⅰ"): "経営管理は機能していますが、財務が危機的。データに基づいた迅速な財務改善アクションが求められます。",
+        ("b", "Ⅱ"): "管理体制は良好。債務超過解消に向けた計画的な利益積み上げと資本増強策を検討しましょう。",
+        ("b", "Ⅲ"): "組織力は高い。キャッシュフロー不足の原因を特定し、収益構造の改善に経営資源を集中させましょう。",
+        ("b", "Ⅳ"): "優良ステージです。さらなる成長に向けて、新規事業開発や人材育成への投資を検討する段階です。",
+        ("a", "Ⅰ"): "組織能力は最高ランクですが財務が危機的。組織力を活かして財務立て直しに全集中してください。",
+        ("a", "Ⅱ"): "管理体制は完成度が高い。債務超過解消に向けた戦略的な資本政策に取り組みましょう。",
+        ("a", "Ⅲ"): "組織は優秀。CF不足の根本原因を分析し、収益モデルの転換や価格戦略を検討してください。",
+        ("a", "Ⅳ"): "理想的なポジションです。持続的成長と事業承継・拡大投資を視野に入れた経営計画を策定しましょう。",
+    }
+
+    advice = advice_map.get((rank, fin_rank), "引き続き経営管理の仕組みを強化し、継続的な改善サイクルを維持してください。")
+    resche_note = "\n\n⚠️ **リスケ中のため、金融機関との返済計画の再交渉・条件変更が急務です。**" if resche else ""
+
+    st.info(advice + resche_note)
+
+    # ── 各項目スコア内訳 ────────────────────────────────────
+    st.markdown("---")
+    st.subheader("📋 項目別スコア内訳")
+    labels = [item["label"] for item in ITEMS]
+    fig2 = go.Figure(go.Bar(
+        x=scores,
+        y=labels,
+        orientation="h",
+        marker_color=[
+            "#1b5e20" if s == 2 else "#f9a825" if s == 1 else "#b71c1c"
+            for s in scores
+        ],
+        text=[{2: "ある（2点）", 1: "不十分（1点）", 0: "ない（0点）"}[s] for s in scores],
+        textposition="inside",
+    ))
+    fig2.update_layout(
+        height=260,
+        xaxis=dict(range=[0, 2.5], dtick=1, title="スコア"),
+        yaxis=dict(autorange="reversed"),
+        margin=dict(t=10, b=40, l=10, r=10),
+        plot_bgcolor="white",
+    )
+    st.plotly_chart(fig2, use_container_width=True)
+
+    st.caption("※ 本診断はあくまで簡易的な自己評価ツールです。詳細な経営診断は専門家にご相談ください。")
+
+
 # ルーティング
 # ============================================================
 if page == "📊 総合概要":
@@ -3787,5 +4039,7 @@ elif page == "🏛️ 政策提言":
     page_policy()
 elif page == "💴 補助金カレンダー":
     page_subsidies()
+elif page == "🏢 組織成熟度診断":
+    page_maturity_diagnosis()
 elif page == "🔌 e-Stat API連携":
     page_estat()

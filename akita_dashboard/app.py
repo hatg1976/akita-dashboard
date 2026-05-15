@@ -22,6 +22,7 @@ from collector import (
     get_sample_industry,
     get_sample_economy,
     get_sample_municipal,
+    get_sample_industry_municipal,
     get_sample_renewable_energy,
     get_sample_food_manufacturing,
     get_sample_food_trend,
@@ -80,6 +81,27 @@ page = st.sidebar.selectbox(
 )
 
 st.sidebar.markdown("---")
+
+# 市町村比較ページのみスライサーを表示
+if page == "🏘️ 市町村比較":
+    _df_im_sidebar = get_sample_industry_municipal()
+    _all_muni = list(_df_im_sidebar["市町村"].unique())
+    _all_ind  = list(_df_im_sidebar["産業大分類"].unique())
+    st.sidebar.markdown("### 🗂️ マトリックス絞り込み")
+    st.sidebar.multiselect(
+        "市町村を選択",
+        options=_all_muni,
+        default=_all_muni,
+        key="matrix_muni",
+    )
+    st.sidebar.multiselect(
+        "業種（産業大分類）を選択",
+        options=_all_ind,
+        default=_all_ind,
+        key="matrix_ind",
+    )
+    st.sidebar.markdown("---")
+
 st.sidebar.markdown("**データ出典**")
 st.sidebar.markdown("- 国勢調査（総務省）")
 st.sidebar.markdown("- 住民基本台帳人口移動報告")
@@ -314,9 +336,59 @@ def page_economy():
 # ============================================================
 # 市町村比較ページ
 # ============================================================
+def _build_matrix(df_raw: pd.DataFrame, sel_muni: list, sel_ind: list) -> pd.DataFrame:
+    """ピボットテーブルを作成し、合計行・列に事業所数と構成比を付与して返す。"""
+    df = df_raw.copy()
+    if sel_muni:
+        df = df[df["市町村"].isin(sel_muni)]
+    if sel_ind:
+        df = df[df["産業大分類"].isin(sel_ind)]
+
+    if df.empty:
+        return pd.DataFrame()
+
+    # 選択順を保持したい → 元データ順でソート
+    muni_order = [m for m in df_raw["市町村"].unique() if m in df["市町村"].unique()]
+    ind_order  = [i for i in df_raw["産業大分類"].unique() if i in df["産業大分類"].unique()]
+
+    pivot = df.pivot_table(
+        index="産業大分類", columns="市町村",
+        values="事業所数", aggfunc="sum", fill_value=0,
+    )
+    pivot = pivot.reindex(index=ind_order, columns=muni_order, fill_value=0)
+
+    grand_total = pivot.values.sum()
+
+    # --- 表示用に文字列テーブルへ変換 ---
+    display = pivot.astype(str)
+
+    # 横計列（各産業の行合計）
+    row_totals = pivot.sum(axis=1)
+    display["合計（横計）"] = row_totals.apply(
+        lambda v: f"{int(v):,}  ({v / grand_total * 100:.1f}%)" if grand_total else "0"
+    )
+
+    # 縦計行（各市町村の列合計）
+    col_totals = pivot.sum(axis=0)
+    totals_dict = {
+        col: f"{int(col_totals[col]):,}  ({col_totals[col] / grand_total * 100:.1f}%)"
+        for col in pivot.columns
+    }
+    totals_dict["合計（横計）"] = f"{int(grand_total):,}  (100%)"
+    totals_row = pd.DataFrame(totals_dict, index=["合計（縦計）"])
+
+    result = pd.concat([display, totals_row])
+    result.index.name = "産業大分類"
+    return result
+
+
 def page_municipal():
     st.title("🏘️ 市町村比較")
     st.markdown("---")
+
+    df_im = get_sample_industry_municipal()
+    sel_muni = st.session_state.get("matrix_muni", list(df_im["市町村"].unique()))
+    sel_ind  = st.session_state.get("matrix_ind",  list(df_im["産業大分類"].unique()))
 
     df = get_sample_municipal()
 
@@ -357,6 +429,58 @@ def page_municipal():
 
     csv = df.to_csv(index=False, encoding="utf-8-sig")
     st.download_button("📥 CSVダウンロード", csv, "akita_municipal.csv", "text/csv")
+
+    # ============================================================
+    # 産業大分類 × 市町村 事業所数マトリックス
+    # ============================================================
+    st.markdown("---")
+    st.subheader("🏭 産業大分類 × 市町村 事業所数マトリックス")
+    st.caption(
+        "右端「合計（横計）」= 業種ごとの合計事業所数と全体構成比　"
+        "／　最下行「合計（縦計）」= 市町村ごとの合計事業所数と全体構成比"
+    )
+
+    if not sel_muni or not sel_ind:
+        st.warning("市町村または業種が未選択です。サイドバーで1つ以上選択してください。")
+    else:
+        matrix_df = _build_matrix(df_im, sel_muni, sel_ind)
+        if matrix_df.empty:
+            st.warning("該当データがありません。")
+        else:
+            st.dataframe(
+                matrix_df.style.apply(
+                    lambda col: [
+                        "background-color: #dce6f1; font-weight: bold;"
+                        if col.name == "合計（横計）"
+                        else ""
+                        for _ in col
+                    ],
+                    axis=0,
+                ).apply(
+                    lambda row: [
+                        "background-color: #dce6f1; font-weight: bold;"
+                        if row.name == "合計（縦計）"
+                        else ""
+                        for _ in row
+                    ],
+                    axis=1,
+                ),
+                use_container_width=True,
+            )
+
+        # CSVダウンロード（数値版）
+        df_num = df_im.copy()
+        if sel_muni:
+            df_num = df_num[df_num["市町村"].isin(sel_muni)]
+        if sel_ind:
+            df_num = df_num[df_num["産業大分類"].isin(sel_ind)]
+        csv_matrix = df_num.to_csv(index=False, encoding="utf-8-sig")
+        st.download_button(
+            "📥 マトリックスCSVダウンロード",
+            csv_matrix,
+            "akita_industry_municipal_matrix.csv",
+            "text/csv",
+        )
 
 
 # ============================================================

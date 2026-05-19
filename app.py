@@ -944,6 +944,7 @@ def page_industry_detail():
         "🤝 事業協同組合",
         "♻️ 廃棄物処理業",
         "🔧 自動車整備業",
+        "🚕 タクシー業",
     ]
 
     selected = st.selectbox("業種を選択", INDUSTRIES, label_visibility="collapsed")

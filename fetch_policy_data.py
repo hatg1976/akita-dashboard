@@ -125,12 +125,10 @@ def update():
 
     data = load_existing()
     if not data:
-        print("  ⚠ 既存データなし。初期ファイルを確認してください")
-        # last_updatedだけ書いて終了
-        data = {"last_updated": today}
-        OUTPUT_PATH.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        # 既存ファイルが読めない場合は安全のため更新をスキップ
+        # （空データで上書きするとpolicy_data.jsonの内容が消えるため）
+        print("  ⚠ 既存データなし or 読み込みエラー。上書きをスキップします。")
+        print("  → data/policy_cache/policy_data.json を手動で確認してください。")
         return
 
     data["last_updated"] = today

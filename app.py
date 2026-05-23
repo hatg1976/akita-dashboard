@@ -2881,7 +2881,10 @@ def page_industry_census():
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                 margin=dict(t=60, b=40),
             )
-            fig.update_yaxes(title_text="事業所数（所）", secondary_y=False, gridcolor="#e0e0e0")
+            fig.update_yaxes(
+                title_text="事業所数（所）", secondary_y=False,
+                gridcolor="#e0e0e0", range=[0, total_establishments * 1.05],
+            )
             fig.update_yaxes(title_text="累積割合（%）", secondary_y=True, range=[0, 105])
 
             st.plotly_chart(fig, use_container_width=True)

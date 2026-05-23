@@ -1187,60 +1187,142 @@ def fetch_industry_municipal_matrix() -> tuple[pd.DataFrame, str]:
         return _no_data("api_error")
 
 
-def fetch_openclose_stats(area_code: str = AKITA_AREA_CODE) -> tuple[pd.DataFrame, str]:
+# 経済センサス-活動調査 開廃業データ統計表ID（{表示年: statsDataId}）
+# 各調査は前回調査との比較（存続・新設・廃業）を収録
+OPENCLOSE_CENSUS_IDS: dict[str, str] = {
+    "2012年": "0003094569",  # 第2回（平成24年）産業大分類×都道府県×市区町村
+    "2016年": "0003218720",  # 第3回（平成28年）産業大分類×都道府県×市区町村
+    "2021年": "0004005659",  # 第4回（令和3年）産業大分類×都道府県×市区町村
+}
+
+
+def _detect_openclose_dims(meta: dict) -> tuple:
     """
-    令和3年経済センサス-活動調査 産業(大分類)×存続・新設・廃業別 事業所数
-    統計表ID: 0004005659（都道府県・市区町村レベル）
+    e-Stat メタ情報から産業・区分・経営組織の次元を自動判定する
+    （2012年/2016年: tab次元に区分、2021年: cat03次元に区分 という違いを吸収）
+
+    Returns:
+        (industry_dim, kubun_dim, kubun_code_map, keiei_dim, tab_jigyo_code)
+        kubun_code_map: {APIコード: 区分名} ※ 存続/新設/廃業のみ
+        tab_jigyo_code: cat03スタイル時の事業所数tabコード（tabスタイル時は None）
+    """
+    KUBUN_NAMES = {"存続事業所", "新設事業所", "廃業事業所"}
+    INDUSTRY_KW = ("建設", "製造", "小売", "卸売", "農林", "鉱業",
+                   "不動産", "サービス", "運輸", "情報通信", "金融", "飲食")
+
+    # ── 区分次元を特定 ────────────────────────────────────────────────────
+    kubun_code_map: dict[str, str] = {}
+    kubun_dim: Optional[str] = None
+
+    # cat03 優先（2021年スタイル）
+    for code, name in meta.get("cat03", {}).items():
+        if name in KUBUN_NAMES:
+            kubun_code_map[code] = name
+    if kubun_code_map:
+        kubun_dim = "cat03"
+
+    # tab に区分がある場合（2016年・2012年スタイル）
+    if not kubun_dim:
+        for code, name in meta.get("tab", {}).items():
+            for kubun in KUBUN_NAMES:
+                if kubun in name and "従業者" not in name:
+                    kubun_code_map[code] = kubun
+                    break
+        if kubun_code_map:
+            kubun_dim = "tab"
+
+    # ── 産業次元を特定 ────────────────────────────────────────────────────
+    industry_dim: Optional[str] = None
+    for dim in ("cat01", "cat02"):
+        dim_vals = meta.get(dim, {}).values()
+        if any(any(kw in n for kw in INDUSTRY_KW) for n in dim_vals):
+            industry_dim = dim
+            break
+
+    # ── 経営組織次元（産業以外の cat）を特定 ─────────────────────────────
+    keiei_dim: Optional[str] = None
+    for dim in ("cat01", "cat02"):
+        if dim != industry_dim and meta.get(dim):
+            keiei_dim = dim
+            break
+
+    # ── cat03スタイル時の事業所数 tab コード ──────────────────────────────
+    tab_jigyo_code: Optional[str] = None
+    if kubun_dim == "cat03":
+        for code, name in meta.get("tab", {}).items():
+            if "事業所数" in name and "従業者" not in name:
+                tab_jigyo_code = code
+                break
+
+    return industry_dim, kubun_dim, kubun_code_map, keiei_dim, tab_jigyo_code
+
+
+def fetch_openclose_stats(
+    area_code: str = AKITA_AREA_CODE,
+    stats_id: str = "0004005659",
+) -> tuple[pd.DataFrame, str]:
+    """
+    経済センサス-活動調査 産業(大分類)×存続・新設・廃業別 事業所数
+    2012年・2016年・2021年の各調査に対応（次元構造の違いを自動吸収）
+
+    Args:
+        area_code: 地域コード（デフォルト: 秋田県 "05000"）
+        stats_id:  統計表ID（OPENCLOSE_CENSUS_IDS の値を参照）
 
     Returns:
         (df, source_note)
-        df: DataFrame with columns [産業, 区分, 事業所数]
-            区分: '存続事業所' / '新設事業所' / '廃業事業所'
-        source_note: データ出典文字列（エラー時は "no_key" / "api_error: ..." / "no_data"）
+        df: [産業, 区分, 事業所数] DataFrame
+        source_note: 出典文字列、またはエラー種別文字列
     """
-    STATS_ID = "0004005659"
     TARGET_KUBUN = {"存続事業所", "新設事業所", "廃業事業所"}
+    EXCL_INDUSTRY = ("合計", "総数", "全産業", "農林漁業", "農林水産")
 
     if not is_api_key_set():
         return pd.DataFrame(), "no_key"
 
-    # ── Step1: メタ情報のみ取得（次元コードを把握）──────────────────────────
+    # ── Step1: メタ情報取得 ──────────────────────────────────────────────
     try:
-        _, meta = fetch_stats_data(STATS_ID, area_code=area_code, limit=1)
+        _, meta = fetch_stats_data(stats_id, area_code=area_code, limit=1)
     except Exception as e:
         return pd.DataFrame(), f"api_error: {e}"
 
-    # 経営組織（cat02）等の合計コードを特定して絞り込みパラメータを作る
+    industry_dim, kubun_dim, kubun_code_map, keiei_dim, tab_jigyo_code = (
+        _detect_openclose_dims(meta)
+    )
+
+    if not industry_dim or not kubun_dim or not kubun_code_map:
+        return pd.DataFrame(), "no_data"
+
+    # ── Step2: APIパラメータ組み立て ─────────────────────────────────────
     extra: dict = {}
-    for dim_key in ("cat02", "cat04", "cat05"):
-        dim_meta = meta.get(dim_key, {})
-        if not dim_meta:
-            continue
-        # コード "0" / "00" / "000" を合計コードとして優先
-        found = False
+
+    # 経営組織次元 → 総数コードに絞り込み
+    if keiei_dim:
+        keiei_meta = meta.get(keiei_dim, {})
         for zero in ("0", "00", "000"):
-            if zero in dim_meta:
-                api_param = "cdCat" + dim_key[3:].zfill(2)
-                extra[api_param] = zero
-                found = True
+            if zero in keiei_meta:
+                extra[f"cdCat{keiei_dim[3:].zfill(2)}"] = zero
                 break
-        if not found:
-            for code, name in dim_meta.items():
+        else:
+            for code, name in keiei_meta.items():
                 if name in {"総数", "合計", "計"}:
-                    api_param = "cdCat" + dim_key[3:].zfill(2)
-                    extra[api_param] = code
+                    extra[f"cdCat{keiei_dim[3:].zfill(2)}"] = code
                     break
 
-    # tab（事業所数 vs 従業者数）絞り込み
-    for code, name in meta.get("tab", {}).items():
-        if "事業所数" in name and "従業者" not in name:
-            extra["cdTab"] = code
-            break
+    # tabスタイル: 存続/新設/廃業の tab コードのみ取得
+    if kubun_dim == "tab":
+        extra["cdTab"] = ",".join(kubun_code_map.keys())
 
-    # ── Step2: 全データ取得 ──────────────────────────────────────────────────
+    # cat03スタイル: 事業所数 tab コード + cat03 を絞り込み
+    if kubun_dim == "cat03":
+        if tab_jigyo_code:
+            extra["cdTab"] = tab_jigyo_code
+        extra["cdCat03"] = ",".join(kubun_code_map.keys())
+
+    # ── Step3: 全データ取得 ──────────────────────────────────────────────
     try:
         df, meta2 = fetch_stats_data(
-            STATS_ID, area_code=area_code, limit=10000, extra_params=extra
+            stats_id, area_code=area_code, limit=10000, extra_params=extra
         )
     except Exception as e:
         return pd.DataFrame(), f"api_error: {e}"
@@ -1248,20 +1330,22 @@ def fetch_openclose_stats(area_code: str = AKITA_AREA_CODE) -> tuple[pd.DataFram
     if df.empty:
         return pd.DataFrame(), "no_data"
 
-    cat01_map = meta2.get("cat01", {})
-    cat03_map = meta2.get("cat03", {})
+    industry_map = meta2.get(industry_dim, {})
 
-    # 産業・区分ラベルを付与
-    df["産業"] = df["cat01"].map(cat01_map) if "cat01" in df.columns else ""
-    df["区分"] = df["cat03"].map(cat03_map) if "cat03" in df.columns else ""
+    # 産業名付与
+    df["産業"] = df[industry_dim].map(industry_map) if industry_dim in df.columns else ""
 
-    # 存続・新設・廃業のみに絞り込み（総数行は除外）
+    # 区分名付与（次元スタイルによって取得元が異なる）
+    if kubun_dim == "cat03":
+        kubun_name_map = meta2.get("cat03", {})
+        df["区分"] = df["cat03"].map(kubun_name_map) if "cat03" in df.columns else ""
+    else:  # tabスタイル
+        df["区分"] = df["tab"].map(kubun_code_map) if "tab" in df.columns else ""
+
+    # 存続・新設・廃業のみに絞り込み
     df = df[df["区分"].isin(TARGET_KUBUN)].copy()
-
-    # 産業合計行を除外（特定キーワードを含む行）
-    _EXCL = ("合計", "総数", "全産業", "農林漁業", "農林水産")
-    if "産業" in df.columns:
-        df = df[~df["産業"].str.contains("|".join(_EXCL), na=False)].copy()
+    # 産業合計行を除外
+    df = df[~df["産業"].str.contains("|".join(EXCL_INDUSTRY), na=False)].copy()
 
     if df.empty:
         return pd.DataFrame(), "no_data"
@@ -1274,5 +1358,22 @@ def fetch_openclose_stats(area_code: str = AKITA_AREA_CODE) -> tuple[pd.DataFram
     )
     result["事業所数"] = result["事業所数"].astype(int)
 
-    source = "令和3年経済センサス-活動調査（2021年）存続・新設・廃業別事業所数（秋田県）"
+    year_label = next((y for y, sid in OPENCLOSE_CENSUS_IDS.items() if sid == stats_id), "")
+    source = f"経済センサス-活動調査{' ' + year_label if year_label else ''}（出典: 総務省・経産省）"
     return result, source
+
+
+def fetch_openclose_trend(area_code: str = AKITA_AREA_CODE) -> dict[str, pd.DataFrame]:
+    """
+    複数年の経済センサスから開廃業データを取得する
+
+    Returns:
+        {表示年: df} 辞書（取得失敗の年は含まれない）
+        df: [産業, 区分, 事業所数] DataFrame
+    """
+    trend: dict[str, pd.DataFrame] = {}
+    for year_label, stats_id in OPENCLOSE_CENSUS_IDS.items():
+        df, _ = fetch_openclose_stats(area_code=area_code, stats_id=stats_id)
+        if not df.empty:
+            trend[year_label] = df
+    return trend

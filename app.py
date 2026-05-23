@@ -3051,8 +3051,9 @@ def page_industry_matrix():
             heat_annot = st.checkbox("数値を表示", value=True, key="heat_annot")
 
         # ヒートマップ用数値マトリックス（合計行・合計列を除く）
+        # "-"（秘匿値）→ 0 に変換後、object 型が残らないよう int64 に明示キャスト
         df_heat_base = df_pivot.loc[row_sel, col_sel].copy()
-        df_heat_num = df_heat_base.apply(lambda col: col.map(_to_int))
+        df_heat_num = df_heat_base.apply(lambda col: col.map(_to_int)).astype("int64")
 
         if heat_norm == "市町村内構成比（%）":
             col_totals_h = df_heat_num.sum(axis=0).replace(0, 1)

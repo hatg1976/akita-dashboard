@@ -4025,24 +4025,36 @@ $$
                 return (name.replace("，", "・").replace("、", "・")
                             .replace("（", "(").replace("）", ")").strip())
 
+            # 各調査年の比較期間（年数）— 経済センサスは5年ごとではなく不規則
+            # 2012年調査: 2009基礎調査→2012活動調査（3年間）
+            # 2016年調査: 2012活動調査→2016活動調査（4年間）
+            # 2021年調査: 2016活動調査→2021活動調査（5年間）
+            _DURATION = {"2012年": 3, "2016年": 4, "2021年": 5}
+
             rate_rows = []
             for year, df_yr in trend_dict.items():
                 pv = _make_pivot(df_yr)
+                dur = _DURATION.get(year, 5)
                 for ind_raw, row in pv.iterrows():
+                    r_open = row.get("開業率(%)", pd.NA)
+                    r_clos = row.get("廃業率(%)", pd.NA)
                     rate_rows.append({
                         "調査年": year,
                         "産業（原文）": ind_raw,
                         "産業": _norm_ind(str(ind_raw)),
                         "産業短": _norm_ind(str(ind_raw))[:20],
-                        "開業率(%)": row.get("開業率(%)", pd.NA),
-                        "廃業率(%)": row.get("廃業率(%)", pd.NA),
+                        "開業率_累計(%)": r_open,
+                        "廃業率_累計(%)": r_clos,
+                        # 年換算：累計率 ÷ 比較期間年数（推移の比較に使用）
+                        "開業率_年換算(%)": round(float(r_open) / dur, 2) if pd.notna(r_open) else pd.NA,
+                        "廃業率_年換算(%)": round(float(r_clos) / dur, 2) if pd.notna(r_clos) else pd.NA,
+                        "比較期間(年)": dur,
                         "新設事業所": int(row.get("新設事業所", 0)),
                         "廃業事業所": int(row.get("廃業事業所", 0)),
                         "存続事業所": int(row.get("存続事業所", 0)),
                     })
 
             df_rate = pd.DataFrame(rate_rows)
-            survey_years = sorted(df_rate["調査年"].unique())
 
             # 全産業合計行を追加
             total_rows = []
@@ -4050,12 +4062,18 @@ $$
                 new_sum = grp["新設事業所"].sum()
                 clo_sum = grp["廃業事業所"].sum()
                 ext_sum = grp["存続事業所"].sum()
+                dur = _DURATION.get(year, 5)
+                ro = round(new_sum / (ext_sum + new_sum) * 100, 1) if (ext_sum + new_sum) > 0 else pd.NA
+                rc = round(clo_sum / (ext_sum + clo_sum) * 100, 1) if (ext_sum + clo_sum) > 0 else pd.NA
                 total_rows.append({
                     "調査年": year,
                     "産業": "【全産業合計】",
                     "産業短": "全産業",
-                    "開業率(%)": round(new_sum / (ext_sum + new_sum) * 100, 1) if (ext_sum + new_sum) > 0 else pd.NA,
-                    "廃業率(%)": round(clo_sum / (ext_sum + clo_sum) * 100, 1) if (ext_sum + clo_sum) > 0 else pd.NA,
+                    "開業率_累計(%)": ro,
+                    "廃業率_累計(%)": rc,
+                    "開業率_年換算(%)": round(float(ro) / dur, 2) if pd.notna(ro) else pd.NA,
+                    "廃業率_年換算(%)": round(float(rc) / dur, 2) if pd.notna(rc) else pd.NA,
+                    "比較期間(年)": dur,
                     "新設事業所": new_sum, "廃業事業所": clo_sum, "存続事業所": ext_sum,
                 })
             df_rate = pd.concat([df_rate, pd.DataFrame(total_rows)], ignore_index=True)
@@ -4075,77 +4093,90 @@ $$
             else:
                 df_sel = df_rate[df_rate["産業"].isin(sel_industries)].copy()
 
-                # 開業率推移
-                st.subheader("開業率の推移（%）")
+                # ── 比較期間の注意書き ──────────────────────────────────────
+                st.info(
+                    "⚠️ **比較期間が調査年ごとに異なります**\n\n"
+                    "| 調査年 | 比較期間 | 実質年数 |\n"
+                    "|--------|---------|--------|\n"
+                    "| 2012年 | 2009年→2012年 | **3年間** |\n"
+                    "| 2016年 | 2012年→2016年 | **4年間** |\n"
+                    "| 2021年 | 2016年→2021年 | **5年間** |\n\n"
+                    "累計値をそのまま比較すると期間が長い2021年が高く見えます。"
+                    "下のグラフは**年換算値**（累計率 ÷ 比較年数）で統一しています。"
+                )
+
+                # 開業率推移（年換算）
+                st.subheader("開業率の推移（年換算 %/年）")
                 st.caption(
-                    "開業率 = 新設事業所 ÷（存続＋新設）× 100　　"
-                    "各調査年は前回調査からの5年間の変化を反映"
+                    "開業率（年換算）= 累計開業率 ÷ 比較期間年数　　"
+                    "年換算することで2012・2016・2021年を公平に比較できます"
                 )
                 fig_t1 = px.line(
-                    df_sel.dropna(subset=["開業率(%)"]),
-                    x="調査年", y="開業率(%)", color="産業短",
+                    df_sel.dropna(subset=["開業率_年換算(%)"]),
+                    x="調査年", y="開業率_年換算(%)", color="産業短",
                     markers=True,
                     color_discrete_sequence=px.colors.qualitative.Set2,
+                    hover_data={"開業率_累計(%)": True, "比較期間(年)": True},
                 )
                 fig_t1.update_layout(
-                    height=420, yaxis_title="開業率（%）",
+                    height=420, yaxis_title="開業率（%/年）",
                     legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="left", x=0),
                     margin=dict(t=30, b=120, l=60, r=20), plot_bgcolor="white",
                     xaxis=dict(type="category"),
                 )
                 st.plotly_chart(fig_t1, use_container_width=True)
 
-                # 廃業率推移
-                st.subheader("廃業率の推移（%）")
+                # 廃業率推移（年換算）
+                st.subheader("廃業率の推移（年換算 %/年）")
                 st.caption(
-                    "廃業率 = 廃業事業所 ÷（存続＋廃業）× 100　　"
+                    "廃業率（年換算）= 累計廃業率 ÷ 比較期間年数　　"
                     "廃業率が上昇トレンドにある業種は後継者問題・市場縮小の懸念"
                 )
                 fig_t2 = px.line(
-                    df_sel.dropna(subset=["廃業率(%)"]),
-                    x="調査年", y="廃業率(%)", color="産業短",
+                    df_sel.dropna(subset=["廃業率_年換算(%)"]),
+                    x="調査年", y="廃業率_年換算(%)", color="産業短",
                     markers=True,
                     color_discrete_sequence=px.colors.qualitative.Set2,
+                    hover_data={"廃業率_累計(%)": True, "比較期間(年)": True},
                 )
                 fig_t2.update_layout(
-                    height=420, yaxis_title="廃業率（%）",
+                    height=420, yaxis_title="廃業率（%/年）",
                     legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="left", x=0),
                     margin=dict(t=30, b=120, l=60, r=20), plot_bgcolor="white",
                     xaxis=dict(type="category"),
                 )
                 st.plotly_chart(fig_t2, use_container_width=True)
 
-                # 全産業合計の棒グラフ（事業所数の絶対値推移）
-                st.subheader("全産業 新設・廃業事業所数の推移")
+                # 全産業 年換算事業所数の推移（新設・廃業 ÷ 比較年数）
+                st.subheader("全産業 年間換算 新設・廃業事業所数の推移")
+                st.caption("各期間の件数を年数で割って年換算。期間の長さによる差異を補正した比較値。")
                 df_total = df_rate[df_rate["産業"] == "【全産業合計】"].copy()
+                df_total["新設_年換算"] = (df_total["新設事業所"] / df_total["比較期間(年)"]).round(0).astype(int)
+                df_total["廃業_年換算"] = (df_total["廃業事業所"] / df_total["比較期間(年)"]).round(0).astype(int)
                 fig_t3 = go.Figure()
                 fig_t3.add_trace(go.Bar(
-                    name="新設事業所",
-                    x=df_total["調査年"], y=df_total["新設事業所"],
+                    name="新設（年換算）",
+                    x=df_total["調査年"], y=df_total["新設_年換算"],
                     marker_color="#1565C0",
-                    text=df_total["新設事業所"].apply(lambda v: f"{v:,}"),
+                    text=df_total["新設_年換算"].apply(lambda v: f"{v:,}/年"),
                     textposition="outside",
                 ))
                 fig_t3.add_trace(go.Bar(
-                    name="廃業事業所",
-                    x=df_total["調査年"], y=df_total["廃業事業所"],
+                    name="廃業（年換算）",
+                    x=df_total["調査年"], y=df_total["廃業_年換算"],
                     marker_color="#C62828",
-                    text=df_total["廃業事業所"].apply(lambda v: f"{v:,}"),
+                    text=df_total["廃業_年換算"].apply(lambda v: f"{v:,}/年"),
                     textposition="outside",
                 ))
                 fig_t3.update_layout(
                     barmode="group", height=380,
-                    yaxis_title="事業所数（件）",
+                    yaxis_title="事業所数（件/年）",
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                     margin=dict(t=40, b=60, l=60, r=20), plot_bgcolor="white",
                     xaxis=dict(type="category"),
                 )
                 st.plotly_chart(fig_t3, use_container_width=True)
-
-                st.caption(
-                    "※ 2012年は2007→2012年、2016年は2012→2016年、2021年は2016→2021年の変化。"
-                    "次回調査（2026年予定）公開後に自動更新されます。"
-                )
+                st.caption("次回調査（2026年予定）公開後、自動的に4点推移に更新されます。")
 
     # ── タブ④: データ一覧 ────────────────────────────────────────────────
     with tab_data:

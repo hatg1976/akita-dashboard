@@ -3885,17 +3885,20 @@ $$
     st.markdown("---")
 
     # ── データ取得 ────────────────────────────────────────────────────────
-    if not estat_api.is_api_key_set():
-        st.warning("e-Stat APIキーが設定されていません。「🔌 e-Stat API連携」ページで設定してください。")
-        return
-
-    with st.spinner("e-Stat からデータ取得中（2021年・2016年・2012年）…"):
+    # JSONキャッシュ優先（GitHub Actions が毎月更新）→ キャッシュなし時のみ API を使用
+    with st.spinner("データ読み込み中（JSONキャッシュ → e-Stat API）…"):
         df_latest, source_latest = _load_openclose_stats()
         trend_dict = _load_openclose_trend()
 
     if df_latest.empty:
-        msg_map = {"no_key": "APIキーが設定されていません。", "no_data": "データが取得できませんでした。"}
-        st.error(msg_map.get(source_latest, f"取得エラー: {source_latest}"))
+        if not estat_api.is_api_key_set():
+            st.warning(
+                "JSONキャッシュが見つかりません。"
+                "「🔌 e-Stat API連携」ページでAPIキーを設定すると実データを取得できます。"
+            )
+        else:
+            msg_map = {"no_key": "APIキーが設定されていません。", "no_data": "データが取得できませんでした。"}
+            st.error(msg_map.get(source_latest, f"取得エラー: {source_latest}"))
         return
 
     st.caption(f"出典: {source_latest}　｜　取得済み調査年: {', '.join(trend_dict.keys())}")
@@ -4043,11 +4046,9 @@ $$
                 return (name.replace("，", "・").replace("、", "・")
                             .replace("（", "(").replace("）", ")").strip())
 
-            # 各調査年の比較期間（年数）— 経済センサスは5年ごとではなく不規則
-            # 2012年調査: 2009基礎調査→2012活動調査（3年間）
-            # 2016年調査: 2012活動調査→2016活動調査（4年間）
-            # 2021年調査: 2016活動調査→2021活動調査（5年間）
-            _DURATION = {"2012年": 3, "2016年": 4, "2021年": 5}
+            # 各調査年の比較期間（年数）— JSONキャッシュの duration_years を動的に読み込む
+            # 2026年頃の次回センサスが追加されてもコード変更不要
+            _DURATION = estat_api.load_cached_openclose_duration_map()
 
             rate_rows = []
             for year, df_yr in trend_dict.items():

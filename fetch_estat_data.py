@@ -24,7 +24,7 @@ load_dotenv()
 import pandas as pd
 from estat_api import fetch_formatted_population_trend, fetch_stats_data, TOHOKU_PREFS
 from estat_api import fetch_industry_municipal_matrix
-from estat_api import fetch_openclose_stats, OPENCLOSE_CENSUS_IDS
+from estat_api import fetch_openclose_stats, OPENCLOSE_CENSUS_IDS, _fetch_estat
 
 OUTPUT_DIR = Path(__file__).parent / "data" / "estat_cache"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -73,18 +73,131 @@ def fetch_matrix(today: str) -> bool:
         return False
 
 
+def discover_new_census_ids() -> dict:
+    """
+    e-Stat を検索して、OPENCLOSE_CENSUS_IDS に未登録の経済センサス 開廃業IDを探す
+
+    Returns:
+        {year_label: {"stats_id": "...", "duration_years": N}} の辞書
+        新規IDがない場合は空辞書
+    """
+    IDS_CACHE = OUTPUT_DIR / "openclose_census_ids.json"
+
+    # 既知の調査年（ハードコード + 過去の発見済み）
+    known_years = {int(y.replace("年", "")) for y in OPENCLOSE_CENSUS_IDS}
+    if IDS_CACHE.exists():
+        try:
+            existing = json.loads(IDS_CACHE.read_text(encoding="utf-8"))
+            for y in existing.get("ids", {}):
+                known_years.add(int(y.replace("年", "")))
+        except Exception:
+            pass
+
+    print("\n--- 経済センサス 新規IDを e-Stat で検索中 ---")
+    print(f"  既知の調査年: {sorted(known_years)}")
+
+    try:
+        data = _fetch_estat("getStatsList", {
+            "searchWord": "経済センサス 存続 廃業 大分類",
+            "limit": 40,
+        })
+        tables = (data.get("GET_STATS_LIST", {})
+                      .get("DATALIST_INF", {})
+                      .get("TABLE_INF", []))
+        if isinstance(tables, dict):
+            tables = [tables]
+    except Exception as e:
+        print(f"  ⚠ 検索エラー: {e}")
+        return {}
+
+    def _s(v):
+        if isinstance(v, dict): return v.get("$", "")
+        return str(v) if v else ""
+
+    new_ids: dict = {}
+    for t in tables:
+        title = _s(t.get("TITLE", ""))
+        survey_date = str(t.get("SURVEY_DATE", ""))
+        stats_id = t.get("@id", "")
+
+        # 対象テーブルの絞り込み: 産業大分類×都道府県×市区町村×存続・廃業
+        if not all(kw in title for kw in ["大分類", "廃業"]):
+            continue
+        if not any(kw in title for kw in ["都道府県", "市区町村"]):
+            continue
+
+        # 調査年を SURVEY_DATE（YYYYMM 形式）から抽出
+        try:
+            survey_year = int(survey_date[:4])
+        except (ValueError, IndexError):
+            continue
+
+        if survey_year in known_years:
+            continue  # 既知の年はスキップ
+
+        year_label = f"{survey_year}年"
+        # 比較期間 = 新調査年 - 直前の既知調査年
+        prev = sorted(y for y in known_years if y < survey_year)
+        duration = survey_year - prev[-1] if prev else 5
+
+        if year_label not in new_ids:
+            new_ids[year_label] = {"stats_id": stats_id, "duration_years": duration}
+            print(f"  🆕 新ID発見: {year_label}  stats_id={stats_id}  期間={duration}年")
+            print(f"     表題: {title[:70]}")
+
+    if not new_ids:
+        print(f"  新規IDなし（次回の経済センサスは{max(known_years)+5}年頃の予定）")
+
+    return new_ids
+
+
+def save_discovered_ids(new_ids: dict, today: str) -> None:
+    """発見した新規IDを openclose_census_ids.json にマージ保存する"""
+    IDS_CACHE = OUTPUT_DIR / "openclose_census_ids.json"
+
+    existing: dict = {}
+    if IDS_CACHE.exists():
+        try:
+            existing = json.loads(IDS_CACHE.read_text(encoding="utf-8")).get("ids", {})
+        except Exception:
+            pass
+
+    merged = {**existing, **new_ids}
+    if merged:
+        IDS_CACHE.write_text(
+            json.dumps({"updated_at": today, "ids": merged}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        print(f"  ✅ IDキャッシュ更新: {list(merged.keys())} → {IDS_CACHE.name}")
+
+
 def fetch_openclose(today: str) -> list[str]:
     """
-    経済センサス 開廃業データ（2012/2016/2021年）を取得して JSON に保存する
+    経済センサス 開廃業データを取得して JSON に保存する
+    OPENCLOSE_CENSUS_IDS（ハードコード）＋ openclose_census_ids.json（自動発見）を統合して処理する
 
     Returns:
         成功した調査年ラベルのリスト
     """
-    # 比較期間（年数）— 調査年ごとに異なる
-    DURATION = {"2012年": 3, "2016年": 4, "2021年": 5}
+    # 既知の比較期間（年数）— ハードコード分のデフォルト
+    DURATION: dict[str, int] = {"2012年": 3, "2016年": 4, "2021年": 5}
+
+    # ハードコードIDと自動発見IDをマージ
+    all_ids: dict[str, str] = dict(OPENCLOSE_CENSUS_IDS)
+    ids_cache = OUTPUT_DIR / "openclose_census_ids.json"
+    if ids_cache.exists():
+        try:
+            cached_data = json.loads(ids_cache.read_text(encoding="utf-8"))
+            for year_label, info in cached_data.get("ids", {}).items():
+                all_ids[year_label] = info["stats_id"]
+                if "duration_years" in info:
+                    DURATION[year_label] = int(info["duration_years"])
+        except Exception as e:
+            print(f"  ⚠ IDキャッシュ読み込みエラー: {e}")
+
     succeeded = []
 
-    for year_label, stats_id in OPENCLOSE_CENSUS_IDS.items():
+    for year_label, stats_id in all_ids.items():
         print(f"\n--- 開廃業データ {year_label}（ID: {stats_id}）を取得中 ---")
         # ファイル名: openclose_2021.json など
         year_short = year_label.replace("年", "")
@@ -191,7 +304,13 @@ def fetch_all():
     else:
         errors.append("産業×市町村マトリックス")
 
-    # 開廃業データ（経済センサス 2012/2016/2021年）を取得
+    # 新規経済センサスIDを e-Stat で自動検索（次回調査年 = 2026年頃の予定）
+    # 新IDが見つかった場合は openclose_census_ids.json に保存し次回 fetch_openclose で取得される
+    new_ids = discover_new_census_ids()
+    if new_ids:
+        save_discovered_ids(new_ids, today)
+
+    # 開廃業データ（ハードコードID＋自動発見ID）を取得・保存
     # ※ 経済センサスは5年ごとのため毎月同じデータが上書きされる（初回キャッシュ生成に必要）
     oc_succeeded = fetch_openclose(today)
     if oc_succeeded:

@@ -1403,17 +1403,68 @@ def load_cached_openclose_stats(survey_year: str = "2021年") -> tuple[pd.DataFr
 
 def load_cached_openclose_trend() -> dict[str, pd.DataFrame]:
     """
-    全調査年の開廃業キャッシュを読み込んで辞書で返す
+    data/estat_cache/ 内の openclose_[0-9]*.json を全スキャンして辞書で返す
+    OPENCLOSE_CENSUS_IDS に未登録の新調査年JSONが追加されても自動的に読み込む
 
     Returns:
-        {表示年: df} 辞書（キャッシュがない年は含まれない）
+        {表示年: df} 辞書（キャッシュがない年は含まれない）、調査年昇順でソート済み
     """
+    from pathlib import Path
+    import json as _json
+
+    cache_dir = Path(__file__).parent / "data" / "estat_cache"
     trend: dict[str, pd.DataFrame] = {}
-    for year_label in OPENCLOSE_CENSUS_IDS:
-        df, _ = load_cached_openclose_stats(year_label)
-        if not df.empty:
-            trend[year_label] = df
-    return trend
+
+    for cache_path in sorted(cache_dir.glob("openclose_[0-9]*.json")):
+        try:
+            cache = _json.loads(cache_path.read_text(encoding="utf-8"))
+            year_label = cache.get("survey_year", "")
+            if not year_label:
+                # ファイル名から推測: openclose_2021.json → "2021年"
+                year_label = cache_path.stem.replace("openclose_", "") + "年"
+            records = cache.get("data", [])
+            df = pd.DataFrame(records)
+            if not df.empty:
+                df["事業所数"] = pd.to_numeric(df["事業所数"], errors="coerce").astype("Int64")
+                trend[year_label] = df
+        except Exception:
+            continue
+
+    # 調査年の昇順でソート（グラフ表示順を保証）
+    return dict(sorted(trend.items()))
+
+
+def load_cached_openclose_duration_map() -> dict[str, int]:
+    """
+    data/estat_cache/ 内の openclose_[0-9]*.json から {調査年ラベル: 比較期間(年)} を返す
+    新調査年が追加されてもコード変更不要。キャッシュにない年は既知デフォルトを使用。
+
+    Returns:
+        {例: "2021年": 5} の辞書
+    """
+    from pathlib import Path
+    import json as _json
+
+    cache_dir = Path(__file__).parent / "data" / "estat_cache"
+    dur_map: dict[str, int] = {}
+
+    for cache_path in sorted(cache_dir.glob("openclose_[0-9]*.json")):
+        try:
+            cache = _json.loads(cache_path.read_text(encoding="utf-8"))
+            year_label = cache.get("survey_year", "")
+            if not year_label:
+                year_label = cache_path.stem.replace("openclose_", "") + "年"
+            dur_map[year_label] = int(cache.get("duration_years", 5))
+        except Exception:
+            continue
+
+    # フォールバック: 既知の年がJSONに未収録の場合
+    _KNOWN_DURATIONS = {"2012年": 3, "2016年": 4, "2021年": 5}
+    for year_label, dur in _KNOWN_DURATIONS.items():
+        if year_label not in dur_map:
+            dur_map[year_label] = dur
+
+    return dur_map
 
 
 def fetch_openclose_trend(area_code: str = AKITA_AREA_CODE) -> dict[str, pd.DataFrame]:

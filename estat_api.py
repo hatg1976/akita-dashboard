@@ -1365,6 +1365,57 @@ def fetch_openclose_stats(
     return result, source
 
 
+def load_cached_openclose_stats(survey_year: str = "2021年") -> tuple[pd.DataFrame, str]:
+    """
+    data/estat_cache/openclose_{year}.json からキャッシュデータを読み込む
+
+    Args:
+        survey_year: "2012年" / "2016年" / "2021年"
+
+    Returns:
+        (df, source_label) または (空DataFrame, "") ファイルがない場合
+        df: [産業, 区分, 事業所数] DataFrame
+    """
+    from pathlib import Path
+    import json
+
+    year_short = survey_year.replace("年", "")
+    cache_path = (
+        Path(__file__).parent / "data" / "estat_cache" / f"openclose_{year_short}.json"
+    )
+    if not cache_path.exists():
+        return pd.DataFrame(), ""
+
+    try:
+        cache = json.loads(cache_path.read_text(encoding="utf-8"))
+        records = cache.get("data", [])
+        fetched_at = cache.get("fetched_at", "")
+        source = cache.get("source", "")
+        df = pd.DataFrame(records)
+        if df.empty:
+            return pd.DataFrame(), ""
+        df["事業所数"] = pd.to_numeric(df["事業所数"], errors="coerce").astype("Int64")
+        source_label = f"{source}（データ取得日: {fetched_at}）"
+        return df, source_label
+    except Exception:
+        return pd.DataFrame(), ""
+
+
+def load_cached_openclose_trend() -> dict[str, pd.DataFrame]:
+    """
+    全調査年の開廃業キャッシュを読み込んで辞書で返す
+
+    Returns:
+        {表示年: df} 辞書（キャッシュがない年は含まれない）
+    """
+    trend: dict[str, pd.DataFrame] = {}
+    for year_label in OPENCLOSE_CENSUS_IDS:
+        df, _ = load_cached_openclose_stats(year_label)
+        if not df.empty:
+            trend[year_label] = df
+    return trend
+
+
 def fetch_openclose_trend(area_code: str = AKITA_AREA_CODE) -> dict[str, pd.DataFrame]:
     """
     複数年の経済センサスから開廃業データを取得する

@@ -24,6 +24,7 @@ load_dotenv()
 import pandas as pd
 from estat_api import fetch_formatted_population_trend, fetch_stats_data, TOHOKU_PREFS
 from estat_api import fetch_industry_municipal_matrix
+from estat_api import fetch_openclose_stats, OPENCLOSE_CENSUS_IDS
 
 OUTPUT_DIR = Path(__file__).parent / "data" / "estat_cache"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -70,6 +71,53 @@ def fetch_matrix(today: str) -> bool:
     except Exception as e:
         print(f"  ❌ エラー: {type(e).__name__}: {e}")
         return False
+
+
+def fetch_openclose(today: str) -> list[str]:
+    """
+    経済センサス 開廃業データ（2012/2016/2021年）を取得して JSON に保存する
+
+    Returns:
+        成功した調査年ラベルのリスト
+    """
+    # 比較期間（年数）— 調査年ごとに異なる
+    DURATION = {"2012年": 3, "2016年": 4, "2021年": 5}
+    succeeded = []
+
+    for year_label, stats_id in OPENCLOSE_CENSUS_IDS.items():
+        print(f"\n--- 開廃業データ {year_label}（ID: {stats_id}）を取得中 ---")
+        # ファイル名: openclose_2021.json など
+        year_short = year_label.replace("年", "")
+        out_path = OUTPUT_DIR / f"openclose_{year_short}.json"
+
+        try:
+            df, source = fetch_openclose_stats(stats_id=stats_id)
+            if df.empty:
+                print(f"  ⚠ データが空でした（スキップ）")
+                continue
+
+            cache = {
+                "fetched_at": today,
+                "survey_year": year_label,
+                "stats_id": stats_id,
+                "duration_years": DURATION.get(year_label, 5),
+                "source": source,
+                "data": df.to_dict(orient="records"),
+            }
+            out_path.write_text(
+                json.dumps(cache, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            new_cnt = int(df[df["区分"] == "新設事業所"]["事業所数"].sum())
+            clo_cnt = int(df[df["区分"] == "廃業事業所"]["事業所数"].sum())
+            print(f"  ✅ 保存完了: {out_path.name}"
+                  f"（新設 {new_cnt:,}件 / 廃業 {clo_cnt:,}件）")
+            succeeded.append(year_label)
+
+        except Exception as e:
+            print(f"  ❌ エラー: {type(e).__name__}: {e}")
+
+    return succeeded
 
 
 def fetch_all():
@@ -142,6 +190,14 @@ def fetch_all():
         fetched.append("産業×市町村マトリックス")
     else:
         errors.append("産業×市町村マトリックス")
+
+    # 開廃業データ（経済センサス 2012/2016/2021年）を取得
+    # ※ 経済センサスは5年ごとのため毎月同じデータが上書きされる（初回キャッシュ生成に必要）
+    oc_succeeded = fetch_openclose(today)
+    if oc_succeeded:
+        fetched.extend([f"開廃業_{y}" for y in oc_succeeded])
+    else:
+        errors.append("開廃業データ")
 
     # マニフェスト（最終更新日・成否サマリー）
     manifest = {

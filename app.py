@@ -64,16 +64,34 @@ def _load_industry_matrix():
     return estat_api.fetch_industry_municipal_matrix()
 
 
-@st.cache_data(ttl=86400 * 30)  # 経済センサスは5年ごと・30日キャッシュ
+@st.cache_data(ttl=86400)  # 1日キャッシュ（JSONキャッシュ優先、APIフォールバック）
 def _load_openclose_stats():
-    """開業・廃業統計（最新2021年）を取得"""
-    return estat_api.fetch_openclose_stats()
+    """開業・廃業統計（最新2021年）を取得
+    優先順位: ローカルJSONキャッシュ → e-Stat API直接取得
+    """
+    # 1. ローカルJSONキャッシュ（GitHub Actions による月次更新）
+    df, source = estat_api.load_cached_openclose_stats("2021年")
+    if not df.empty:
+        return df, source
+    # 2. APIキーがあれば直接取得
+    if estat_api.is_api_key_set():
+        return estat_api.fetch_openclose_stats()
+    return df, source  # 空DataFrame
 
 
-@st.cache_data(ttl=86400 * 30)
+@st.cache_data(ttl=86400)
 def _load_openclose_trend():
-    """2012・2016・2021年 3調査年分の開廃業データを取得"""
-    return estat_api.fetch_openclose_trend()
+    """2012・2016・2021年 3調査年分の開廃業データを取得
+    優先順位: ローカルJSONキャッシュ → e-Stat API直接取得
+    """
+    # 1. ローカルJSONキャッシュ
+    trend = estat_api.load_cached_openclose_trend()
+    if trend:
+        return trend
+    # 2. APIキーがあれば直接取得
+    if estat_api.is_api_key_set():
+        return estat_api.fetch_openclose_trend()
+    return {}
 
 
 def _get_population(area_code: str) -> tuple[pd.DataFrame, str, str]:

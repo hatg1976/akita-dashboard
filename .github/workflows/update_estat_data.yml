@@ -55,7 +55,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "変更なし（スキップ）"
           else
-            git commit -m "🔄 月次データ自動更新 $(date +%Y-%m-%d)（人口推計・政策KPI・補助金）"
+            git commit -m "🔄 月次データ自動更新 $(date +%Y-%m-%d)（人口推計・政策KPI・補助金・開廃業）"
             git push origin main
           fi
 

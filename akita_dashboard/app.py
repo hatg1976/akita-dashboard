@@ -75,6 +75,7 @@ st.sidebar.markdown("---")
 page = st.sidebar.selectbox(
     "表示するデータ",
     ["📊 総合概要", "👥 人口動態", "🏭 産業構造", "💰 経済指標", "🏘️ 市町村比較",
+     "🗺️ 業種別ヒートマップ",
      "🍱 食品製造業", "🏪 商店街", "⚡ 再生可能エネルギー",
      "🏛️ 政策提言", "📚 事例研究DB", "💴 補助金カレンダー", "📝 施策メモ",
      "💹 決算書図解"],
@@ -481,6 +482,160 @@ def page_municipal():
             "akita_industry_municipal_matrix.csv",
             "text/csv",
         )
+
+
+# ============================================================
+# 業種別ヒートマップページ
+# ============================================================
+def page_heatmap():
+    st.title("🗺️ 業種別ヒートマップ")
+    st.caption("産業大分類 × 市町村の事業所分布をインタラクティブに可視化")
+    st.markdown("---")
+
+    df_im = get_sample_industry_municipal()
+
+    # --- コントロール ---
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        normalize = st.selectbox(
+            "表示方法",
+            ["事業所数（実数）", "市町村内構成比（%）", "業種内シェア（%）"],
+        )
+    with col2:
+        color_scale = st.selectbox(
+            "カラースケール",
+            ["Blues", "YlOrRd", "Viridis", "RdYlGn"],
+        )
+    with col3:
+        show_values = st.checkbox("数値を表示", value=True)
+
+    # --- ピボット ---
+    pivot = df_im.pivot_table(
+        index="産業大分類", columns="市町村",
+        values="事業所数", aggfunc="sum",
+    )
+
+    if normalize == "市町村内構成比（%）":
+        pivot_display = (pivot / pivot.sum(axis=0) * 100).round(1)
+        color_label = "構成比（%）"
+        fmt = ".1f"
+    elif normalize == "業種内シェア（%）":
+        pivot_display = (pivot.T / pivot.sum(axis=1) * 100).T.round(1)
+        color_label = "業種内シェア（%）"
+        fmt = ".1f"
+    else:
+        pivot_display = pivot
+        color_label = "事業所数"
+        fmt = "d"
+
+    # --- ヒートマップ本体 ---
+    fig = px.imshow(
+        pivot_display,
+        color_continuous_scale=color_scale,
+        aspect="auto",
+        text_auto=fmt if show_values else False,
+        title=f"産業大分類 × 市町村  ―  {color_label}",
+        labels={"color": color_label, "x": "市町村", "y": "産業大分類"},
+    )
+    fig.update_layout(
+        height=520,
+        xaxis_tickangle=-30,
+        coloraxis_colorbar=dict(title=color_label),
+        font=dict(size=11),
+    )
+    fig.update_traces(textfont_size=10)
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.caption("💡 セルにカーソルを当てると詳細値が表示されます。列や行を選択してズームも可能です。")
+
+    # --- 担当業種フォーカスビュー ---
+    st.markdown("---")
+    st.subheader("担当6業種フォーカス")
+    st.caption("商業振興課担当業種（小売・卸・飲食・サービス・運送）の市町村別集中度")
+
+    # 担当業種に該当する大分類
+    TARGET_INDUSTRIES = [
+        "卸売業・小売業",
+        "宿泊業・飲食サービス業",
+        "運輸業・郵便業",
+        "その他サービス業",
+    ]
+    df_target = df_im[df_im["産業大分類"].isin(TARGET_INDUSTRIES)].copy()
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        # 市町村別の担当業種合計
+        df_muni_total = (
+            df_target.groupby("市町村")["事業所数"]
+            .sum()
+            .reset_index()
+            .sort_values("事業所数", ascending=True)
+        )
+        fig2 = px.bar(
+            df_muni_total,
+            x="事業所数", y="市町村",
+            orientation="h",
+            color="事業所数",
+            color_continuous_scale="Blues",
+            text="事業所数",
+            title="市町村別 担当業種 合計事業所数",
+        )
+        fig2.update_traces(texttemplate="%{text:,}件", textposition="outside")
+        fig2.update_layout(height=360, coloraxis_showscale=False, xaxis_title="事業所数（件）")
+        st.plotly_chart(fig2, use_container_width=True)
+
+    with col2:
+        # 業種別内訳の積み上げ棒グラフ
+        df_stack = df_target.pivot_table(
+            index="市町村", columns="産業大分類",
+            values="事業所数", aggfunc="sum", fill_value=0,
+        ).reset_index()
+        df_stack_long = df_target.copy()
+        # 市町村を合計順に並べる
+        muni_order = df_muni_total.sort_values("事業所数", ascending=False)["市町村"].tolist()
+        df_stack_long["市町村"] = pd.Categorical(df_stack_long["市町村"], categories=muni_order, ordered=True)
+        df_stack_long = df_stack_long.sort_values("市町村")
+
+        fig3 = px.bar(
+            df_stack_long,
+            x="市町村", y="事業所数",
+            color="産業大分類",
+            title="市町村別 業種内訳（担当業種）",
+            color_discrete_sequence=px.colors.qualitative.Set2,
+        )
+        fig3.update_layout(height=360, xaxis_tickangle=-30, legend=dict(orientation="h", y=-0.3))
+        st.plotly_chart(fig3, use_container_width=True)
+
+    # --- インサイト ---
+    st.markdown("---")
+    st.subheader("巡回訪問の優先度ヒント")
+
+    # 事業所数上位3市町村を自動算出
+    top3 = df_muni_total.sort_values("事業所数", ascending=False).head(3)["市町村"].tolist()
+    top_industry_by_muni = (
+        df_target.sort_values("事業所数", ascending=False)
+        .groupby("市町村")
+        .first()
+        .reset_index()[["市町村", "産業大分類", "事業所数"]]
+    )
+
+    col1, col2, col3 = st.columns(3)
+    for col, muni in zip([col1, col2, col3], top3):
+        top_ind = top_industry_by_muni[top_industry_by_muni["市町村"] == muni]
+        ind_name = top_ind["産業大分類"].values[0] if not top_ind.empty else "—"
+        ind_cnt  = int(top_ind["事業所数"].values[0]) if not top_ind.empty else 0
+        total_cnt = int(df_muni_total[df_muni_total["市町村"] == muni]["事業所数"].values[0])
+        with col:
+            st.info(f"**{muni}**\n\n担当業種合計: **{total_cnt:,}件**\n\n最多: {ind_name}（{ind_cnt:,}件）")
+
+    st.dataframe(
+        df_target.pivot_table(
+            index="産業大分類", columns="市町村",
+            values="事業所数", aggfunc="sum", fill_value=0,
+        ).style.background_gradient(cmap="Blues", axis=None),
+        use_container_width=True,
+    )
 
 
 # ============================================================
@@ -1481,6 +1636,8 @@ elif page == "💰 経済指標":
     page_economy()
 elif page == "🏘️ 市町村比較":
     page_municipal()
+elif page == "🗺️ 業種別ヒートマップ":
+    page_heatmap()
 elif page == "🍱 食品製造業":
     page_food()
 elif page == "🏪 商店街":

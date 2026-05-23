@@ -1038,102 +1038,183 @@ def page_shotengai():
 # ============================================================
 def page_policy():
     st.title("🏛️ 政策提言")
-    st.caption("中小企業診断士・中小企業団体中央会の視点から秋田県経済活性化を提言する")
+    st.caption("秋田県庁・行政担当者向け戦略提言｜秋田県中小企業団体中央会")
     st.markdown("---")
 
     df_prop = get_policy_proposals()
     df_kpi  = get_policy_kpi()
-    df_shin = get_shindan_actions()
-    df_chuo = get_chuokai_actions()
+    df_action = get_shindan_actions()
+    df_reform = get_chuokai_actions()
     df_road = get_roadmap()
 
-    # ---- タブ構成 ----
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "📋 提言一覧", "🎯 KPI目標", "🔍 診断士アクション", "🤝 中央会アクション", "🗺️ ロードマップ"
+        "🎯 戦略的枠組み", "🌏 第1柱：成長戦略", "🏗️ 第2柱：持続戦略", "📊 KPI・成果指標", "🗺️ ロードマップ"
     ])
 
-    # ========== TAB1: 提言一覧 ==========
+    # ========== TAB1: 戦略的枠組み ==========
     with tab1:
-        st.subheader("政策提言 10項目")
+        st.subheader("前提認識：直視すべき構造的制約")
+        st.error("""
+        **以下はすべて政策が制御できない所与の条件である**
 
-        # フィルター
+        - 人口減少・超高齢化は不可逆的に進行し、内需は縮小し続ける
+        - 再生可能エネルギーは収益の県外流出・設備の海外依存・安定供給問題があり地域経済の柱にはなりえない
+        - 大企業の自発的立地は期待薄
+        - 農業・食品加工の担い手は農業者・農協が中心であり中小企業政策として介入できる範囲は限られる
+        - 設備投資も補助金も、使う経営者次第で効果が全く変わる
+        """)
+
+        st.subheader("選択肢の絞り込み")
         col1, col2, col3 = st.columns(3)
         with col1:
-            sel_bunya = st.multiselect(
-                "分野で絞り込み",
-                options=df_prop["分野"].unique().tolist(),
-                default=df_prop["分野"].unique().tolist(),
-            )
+            st.error("❌ **新産業の創出**\n\n担い手となる人材・企業・資本が不足しており現実的ではない")
         with col2:
-            sel_priority = st.multiselect(
-                "優先度",
-                options=["高", "中"],
-                default=["高", "中"],
-            )
+            st.error("❌ **全企業への均等支援**\n\n効果が経営者の意欲に大きく左右される以上、資源の分散につながり全体の効果が薄れる")
         with col3:
-            sel_subject = st.multiselect(
-                "提言主体",
-                options=df_prop["主な提言主体"].unique().tolist(),
-                default=df_prop["主な提言主体"].unique().tolist(),
-            )
+            st.success("✅ **限られた資源の集中**\n\n効果が出る領域に政策資源を絞ることが秋田の現実に即した唯一の戦略")
 
-        df_filtered = df_prop[
-            df_prop["分野"].isin(sel_bunya) &
-            df_prop["優先度"].isin(sel_priority) &
-            df_prop["主な提言主体"].isin(sel_subject)
-        ]
-
-        # バブルチャート：期待効果 vs 難易度
-        diff_map = {"低": 1, "中": 2, "高": 3}
-        df_chart = df_filtered.copy()
-        df_chart["難易度_数値"] = df_chart["難易度"].map(diff_map)
-        prio_map = {"高": 20, "中": 12}
-        df_chart["優先度_サイズ"] = df_chart["優先度"].map(prio_map)
-
-        fig = px.scatter(
-            df_chart,
-            x="難易度_数値",
-            y="期待効果（億円/年）",
-            size="優先度_サイズ",
-            color="分野",
-            text="提言ID",
-            hover_name="提言タイトル",
-            hover_data={"難易度_数値": False, "優先度_サイズ": False,
-                        "主な提言主体": True, "実施期間": True},
-            title="提言の優先度マップ（右上ほど高効果・取り組みやすい）",
-            labels={"難易度_数値": "難易度（低→高）", "期待効果（億円/年）": "期待効果（億円/年）"},
-            color_discrete_sequence=px.colors.qualitative.Set2,
-        )
-        fig.update_traces(textposition="top center", marker=dict(opacity=0.85))
-        fig.update_xaxes(tickvals=[1, 2, 3], ticktext=["低", "中", "高"])
-        fig.update_layout(height=420)
-        st.plotly_chart(fig, use_container_width=True)
-
-        # テーブル（色付き）
-        def color_priority(val):
-            return "background-color:#c6efce;color:#276221" if val == "高" else \
-                   "background-color:#ffeb9c;color:#9c5700" if val == "中" else ""
-        def color_subject(val):
-            return "background-color:#dce6f1" if val == "中小企業診断士" else \
-                   "background-color:#fce4d6"
-        styled = (df_filtered.style
-                  .map(color_priority, subset=["優先度"])
-                  .map(color_subject, subset=["主な提言主体"]))
-        st.dataframe(styled, use_container_width=True, height=320)
-
-        # 凡例
+        st.markdown("---")
+        st.subheader("政策の2本柱＋横断的視点")
         col1, col2 = st.columns(2)
         with col1:
-            st.info("🔵 青系：中小企業診断士が主体となる提言")
+            st.success("""
+            ### 第1柱：成長戦略
+            **外に売る力をつける**
+
+            内需縮小への根本的な対応として、
+            県外・海外に売る力をつけることが核心。
+
+            ● 農業・食品加工の付加価値化と販路拡大
+            ● 事業承継による産業集約と強化
+            """)
         with col2:
-            st.warning("🟠 橙系：中小企業団体中央会が主体となる提言")
+            st.info("""
+            ### 第2柱：持続戦略
+            **今ある産業を効率化し支え続ける**
 
-    # ========== TAB2: KPI目標 ==========
+            建設・小売・サービス等が地域雇用・
+            生活インフラを支え続けられる構造への転換。
+
+            ● 省力化投資の徹底活用と効果測定
+            ● 高齢経営者の円滑な出口支援
+            """)
+
+        st.markdown("---")
+        st.subheader("横断的視点：意欲的な経営者を優先的に深く支援する")
+        st.warning("これは公式な選別ではなく、支援機関職員が現場で判断する運用方針である")
+
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.info("**STEP 1 発見**\n\n能動的訪問の中で意欲的な経営者を見つける")
+        with col2:
+            st.info("**STEP 2 深関与**\n\n深く・長く関わり成功事例を作る")
+        with col3:
+            st.info("**STEP 3 横展開**\n\n同業・同地域への刺激で波及させる")
+        with col4:
+            st.info("**STEP 4 循環**\n\n意欲的な経営者が増えるサイクルへ")
+
+    # ========== TAB2: 第1柱：成長戦略 ==========
     with tab2:
-        st.subheader("政策KPI 目標値一覧")
-        st.markdown("現状から3年後・5年後の数値目標を設定し、進捗を管理します。")
+        st.subheader("第1柱：成長戦略（外に売る力をつける）")
+        st.info("内需が縮小し続ける秋田において、県内市場だけを相手にしている企業の生産性向上には構造的な限界がある。**県外・海外に売る力をつけること**が内需縮小への根本的な対応である。")
 
-        # ゲージチャート（主要指標）
+        st.markdown("### P01：農業・食品加工の付加価値化と販路拡大")
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.markdown("""
+            秋田米・比内地鶏等の全国ブランドは実績がある。
+            ただし6次産業化は全国的に失敗事例も多く、
+            **「加工・販売まで一体でやる」より「得意な段階に集中して連携する」**発想が現実的。
+            """)
+        with col2:
+            st.metric("現状の輸出額", "12億円/年", "目標：25億円（3年後）")
+
+        with st.expander("▶ 具体的な政策", expanded=True):
+            st.markdown("""
+            1. **加工・販売を担う中小企業と農業者の連携モデルの構築支援**
+            2. **首都圏・アジア向け既存販路を持つ企業への輸出対応補助（HACCP等）**
+            3. **EC・直販に取り組む事業者への実務的な伴走支援**
+            """)
+
+        st.warning("**留意点**：支援対象を「すでに販路開拓に動いている企業」に絞ることが効果を高める。意欲のない事業者への補助は効果が出にくい。")
+
+        st.markdown("---")
+        st.markdown("### P02：事業承継を産業集約・強化の機会として活用する")
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.markdown("""
+            廃業による産業空洞化を防ぐだけでなく、
+            **承継のタイミングを「業務を再構築し強い企業に集約する機会」**として活用する。
+
+            特に**第三者承継で外部から来た後継者は、しがらみが少なく意欲的な場合が多く**、
+            承継支援が経営者の質の向上にもつながる。
+            """)
+        with col2:
+            st.metric("目標承継件数", "30件/年（3年後）", "現状：15件/年")
+
+        with st.expander("▶ 具体的な政策", expanded=True):
+            st.markdown("""
+            1. **支援機関・商工団体が後継者不在企業を早期に把握し継続的に関与する**
+            2. **第三者承継のマッチングは民間M&A業者と連携して進める**
+               （支援機関は案件発掘・関係構築を担い、専門的な財務・法務は外部に委ねる）
+            3. **承継を機とした不採算事業の整理・業務の仕組み化を支援する**
+            4. **承継後の新経営者への継続的な経営支援をセットで提供する**
+            5. **廃業を選択する場合も従業員・取引先への影響を最小化する支援を行う**
+            """)
+
+        with st.expander("▶ 成果指標"):
+            col1, col2 = st.columns(2)
+            with col1:
+                st.info("**第三者承継成立件数（年間）**\n現状：15件 → 3年後：30件 → 5年後：50件")
+            with col2:
+                st.info("**承継後3年間の企業存続率**\n現状：65% → 3年後：80% → 5年後：85%")
+
+    # ========== TAB3: 第2柱：持続戦略 ==========
+    with tab3:
+        st.subheader("第2柱：持続戦略（今ある産業を効率化し支え続ける）")
+        st.info("建設・小売・サービス等は県内雇用・地域生活インフラを支えており、その効率化は不可欠。求めるのは「成長」ではなく、**人口減少・人手不足の中でも地域を支え続けられる構造への転換**である。")
+
+        st.markdown("### P03：省力化投資の徹底活用と効果測定")
+        st.markdown("""
+        補助金を使って設備を導入することが目的ではなく、
+        **「導入後に実際に工数が減ったか」を確認し次につなげること**が目的である。
+        """)
+
+        with st.expander("▶ 具体的な政策", expanded=True):
+            st.markdown("""
+            1. **省力化投資補助金の活用促進**
+            2. **導入後の効果測定・フォローアップを支援機関が組織的に実施する**
+            3. **成功事例を業種・規模ごとに整理し、類似企業への横展開を図る**
+            """)
+
+        with st.expander("▶ 成果指標"):
+            col1, col2 = st.columns(2)
+            with col1:
+                st.info("**省力化投資後の工数削減率**\n現状：未測定 → 3年後：-15%以上 → 5年後：-25%以上")
+            with col2:
+                st.info("**補助金活用後フォローアップ実施率**\n現状：20% → 3年後：60% → 5年後：80%")
+
+        st.markdown("---")
+        st.markdown("### P04：高齢経営者の円滑な出口支援")
+        st.markdown("""
+        意欲・体力ともに限界を迎えた経営者に対し、
+        成長投資を促すより**円滑な事業終了・承継を支援する**方が現実的かつ有効である。
+        """)
+
+        with st.expander("▶ 具体的な政策", expanded=True):
+            st.markdown("""
+            1. **廃業・承継の意思決定を早める働きかけ（5年先を見越した早期接触）**
+            2. **廃業時の雇用・取引先への影響を最小化する支援**
+            """)
+
+        with st.expander("▶ 成果指標"):
+            st.info("**廃業に伴う雇用喪失数の推移**\n現状：未把握 → 3年後：前年比減 → 5年後：減少傾向の確立")
+
+    # ========== TAB4: KPI・成果指標 ==========
+    with tab4:
+        st.subheader("政策KPI 目標値一覧")
+        st.markdown("提言の効果を測るための指標。**実績データの積み上げが行政への予算要請の最も有力な根拠**になる。")
+
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             fig = go.Figure(go.Indicator(
@@ -1151,29 +1232,29 @@ def page_policy():
             st.plotly_chart(fig, use_container_width=True)
         with col2:
             fig = go.Figure(go.Indicator(
-                mode="gauge+number+delta",
-                value=38.6, delta={"reference": 50, "suffix": "%"},
-                title={"text": "空き店舗率"},
+                mode="gauge+number",
+                value=15,
+                title={"text": "第三者承継件数/年"},
                 gauge={"axis": {"range": [0, 60]},
-                       "steps": [{"range": [0, 20], "color": "#c6efce"},
-                                  {"range": [20, 35], "color": "#ffe699"},
-                                  {"range": [35, 60], "color": "#ffc7ce"}],
-                       "threshold": {"value": 20, "line": {"color": "green", "width": 2}},
-                       "bar": {"color": "#d62728"}},
-                number={"suffix": "%"},
+                       "steps": [{"range": [0, 20], "color": "#ffc7ce"},
+                                  {"range": [20, 40], "color": "#ffe699"},
+                                  {"range": [40, 60], "color": "#c6efce"}],
+                       "threshold": {"value": 30, "line": {"color": "green", "width": 2}},
+                       "bar": {"color": "#2ca02c"}},
+                number={"suffix": "件"},
             ))
             fig.update_layout(height=220, margin=dict(t=40, b=10, l=20, r=20))
             st.plotly_chart(fig, use_container_width=True)
         with col3:
             fig = go.Figure(go.Indicator(
                 mode="gauge+number",
-                value=18,
-                title={"text": "DX導入企業割合"},
+                value=20,
+                title={"text": "フォローアップ実施率"},
                 gauge={"axis": {"range": [0, 100]},
                        "steps": [{"range": [0, 40], "color": "#ffc7ce"},
                                   {"range": [40, 65], "color": "#ffe699"},
                                   {"range": [65, 100], "color": "#c6efce"}],
-                       "threshold": {"value": 65, "line": {"color": "green", "width": 2}},
+                       "threshold": {"value": 60, "line": {"color": "green", "width": 2}},
                        "bar": {"color": "#ff7f0e"}},
                 number={"suffix": "%"},
             ))
@@ -1184,11 +1265,11 @@ def page_policy():
                 mode="gauge+number",
                 value=244,
                 title={"text": "一人当たり県民所得"},
-                gauge={"axis": {"range": [200, 350]},
-                       "steps": [{"range": [200, 265], "color": "#ffc7ce"},
-                                  {"range": [265, 290], "color": "#ffe699"},
-                                  {"range": [290, 350], "color": "#c6efce"}],
-                       "threshold": {"value": 290, "line": {"color": "green", "width": 2}},
+                gauge={"axis": {"range": [200, 300]},
+                       "steps": [{"range": [200, 260], "color": "#ffc7ce"},
+                                  {"range": [260, 275], "color": "#ffe699"},
+                                  {"range": [275, 300], "color": "#c6efce"}],
+                       "threshold": {"value": 260, "line": {"color": "green", "width": 2}},
                        "bar": {"color": "#1f4e79"}},
                 number={"suffix": "万円"},
             ))
@@ -1197,125 +1278,55 @@ def page_policy():
 
         st.markdown("---")
         st.subheader("全指標の目標値")
-        st.dataframe(df_kpi, use_container_width=True)
+
+        def color_pillar(val):
+            if val == "第1柱：成長戦略":
+                return "background-color:#c6efce;color:#276221"
+            elif val == "第2柱：持続戦略":
+                return "background-color:#dce6f1;color:#1f4e79"
+            return ""
+
+        styled = df_kpi.style.map(color_pillar, subset=["柱"])
+        st.dataframe(styled, use_container_width=True)
 
         csv = df_kpi.to_csv(index=False, encoding="utf-8-sig")
         st.download_button("📥 KPI一覧をCSVダウンロード", csv, "akita_policy_kpi.csv", "text/csv")
 
-    # ========== TAB3: 診断士アクション ==========
-    with tab3:
-        st.subheader("中小企業診断士 アクションプラン")
-        st.markdown("""
-        中小企業診断士は**個別企業への深い関与**を強みとして、
-        診断→提言→実行支援→フォローアップのサイクルで企業を継続支援します。
-        """)
-
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            # フェーズ別アクション図
-            phase_order = ["診断", "提言", "実行支援", "フォロー"]
-            phase_count = df_shin.groupby("フェーズ").size().reindex(phase_order).fillna(0)
-            fig = px.funnel(
-                x=phase_count.values,
-                y=phase_count.index,
-                title="支援フェーズの流れ",
-                color_discrete_sequence=["#1f4e79"],
-            )
-            fig.update_layout(height=300)
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col2:
-            st.markdown("#### 主な活用補助金")
-            st.markdown("""
-            - ものづくり補助金
-            - IT導入補助金
-            - 事業再構築補助金
-            - 小規模持続化補助金
-            - 経営革新計画
-            - 早期経営改善計画
-            """)
-
         st.markdown("---")
-        st.subheader("フェーズ別アクション詳細")
-        for phase in ["診断", "提言", "実行支援", "フォロー"]:
-            df_p = df_shin[df_shin["フェーズ"] == phase]
-            with st.expander(f"▶ {phase}フェーズ（{len(df_p)}項目）", expanded=(phase == "診断")):
-                st.dataframe(df_p[["アクション", "対象", "活用する制度・補助金"]], use_container_width=True, hide_index=True)
-
-        st.markdown("---")
-        st.info("""
-        **診断士としての差別化ポイント**
-
-        秋田県では診断士が「単なる経営改善アドバイザー」に留まらず、
-        **データ分析（このダッシュボード）× 現地診断 × 政策立案**を一体で行うことで、
-        行政・金融機関・中央会と連携した**地域全体の経済設計者**として機能できます。
-        """)
-
-    # ========== TAB4: 中央会アクション ==========
-    with tab4:
-        st.subheader("中小企業団体中央会 アクションプラン")
-        st.markdown("""
-        中央会は**組合・業界団体の組織力**を活かし、
-        個社では難しい「共同化・協業・政策建議」を通じて産業全体を底上げします。
-        """)
-
+        st.subheader("財源論：支援予算拡充の正当化ロジック")
         col1, col2 = st.columns(2)
-
         with col1:
-            # 機能別件数
-            func_count = df_chuo["機能"].value_counts().reset_index()
-            func_count.columns = ["機能", "件数"]
-            fig = px.bar(
-                func_count,
-                x="件数", y="機能",
-                orientation="h",
-                color="機能",
-                title="機能別アクション数",
-                color_discrete_sequence=px.colors.qualitative.Pastel,
-            )
-            fig.update_layout(height=300, showlegend=False)
-            st.plotly_chart(fig, use_container_width=True)
+            st.success("""
+            **投資の論理**
 
+            支援予算の拡充（コスト）
+            ↓ 質の高い専門家による支援
+            ↓ 企業の生産性向上・売上増加
+            ↓ 法人税・事業所税等の税収増加
+            ↓ **支援予算を上回る税収増 → 投資として正当化**
+            """)
         with col2:
-            st.markdown("#### 連携先ネットワーク")
-            all_partners = []
-            for p in df_chuo["連携先"]:
-                all_partners.extend([x.strip() for x in p.split("・")])
-            partner_count = pd.Series(all_partners).value_counts().reset_index()
-            partner_count.columns = ["連携先", "連携数"]
-            fig = px.pie(
-                partner_count, values="連携数", names="連携先",
-                title="連携先の構成",
-                hole=0.4,
-                color_discrete_sequence=px.colors.qualitative.Set3,
-            )
-            fig.update_layout(height=300)
-            st.plotly_chart(fig, use_container_width=True)
+            st.info("""
+            **試算の考え方**
 
-        st.markdown("---")
-        st.subheader("機能別アクション詳細")
-        for func in df_chuo["機能"].unique():
-            df_f = df_chuo[df_chuo["機能"] == func]
-            with st.expander(f"▶ {func}（{len(df_f)}項目）", expanded=(func == "組織化支援")):
-                st.dataframe(df_f[["アクション","期待する成果","連携先"]], use_container_width=True, hide_index=True)
+            ● 支援前後の売上変化額 × 対象企業数 × 実効税率
+            ● 廃業抑制による雇用維持数 × 雇用者1人あたりの税・社会保険収入
 
-        st.markdown("---")
-        st.success("""
-        **中央会の強み: 組合制度の活用**
-
-        組合を通じた「共同受注・共同仕入・共同物流」は、
-        個社では実現困難なコスト削減と交渉力強化を可能にします。
-        特に秋田の食品製造業では、**HACCP対応の共同検査施設**や
-        **共同ブランドによる輸出プロモーション**が有効です。
-        """)
+            この試算を実績データとして積み上げることが
+            予算拡充要請の最も有力な根拠になる。
+            """)
 
     # ========== TAB5: ロードマップ ==========
     with tab5:
-        st.subheader("秋田県経済活性化 施策ロードマップ")
-        st.markdown("短期（〜2026）・中期（2027〜2028）・長期（2029〜）の3フェーズで推進します。")
+        st.subheader("秋田県中小企業政策 施策ロードマップ")
+        st.markdown("短期（〜2026）・中期（2027〜2028）・長期（2029〜）の3フェーズで推進する。")
 
-        # ガントチャート風タイムライン
-        phase_colors = {"短期": "#1f77b4", "中期": "#ff7f0e", "長期": "#2ca02c"}
+        pillar_colors = {
+            "第1柱：成長戦略": "#2ca02c",
+            "第2柱：持続戦略": "#1f4e79",
+            "支援機関改革": "#ff7f0e",
+            "総合": "#9467bd",
+        }
         year_map = {
             "2026年度上期": 2026.0, "2026年度": 2026.25, "2026年度下期": 2026.5,
             "2027年度": 2027.0, "2027〜2028年度": 2027.5,
@@ -1328,15 +1339,16 @@ def page_policy():
             df_road,
             x="時期_数値",
             y="施策",
-            color="フェーズ",
-            symbol="主体",
+            color="柱",
+            symbol="フェーズ",
             size_max=15,
-            color_discrete_map=phase_colors,
-            title="施策タイムライン",
+            color_discrete_map=pillar_colors,
+            title="施策タイムライン（色：柱、形：フェーズ）",
             labels={"時期_数値": "年度", "施策": ""},
+            hover_data={"時期": True, "主体": True, "柱": True, "時期_数値": False},
         )
         fig.update_traces(marker=dict(size=14, line=dict(width=1, color="white")))
-        fig.update_layout(height=450, xaxis=dict(tickformat=".0f"))
+        fig.update_layout(height=500, xaxis=dict(tickformat=".0f"))
         st.plotly_chart(fig, use_container_width=True)
 
         st.markdown("---")
@@ -1346,21 +1358,61 @@ def page_policy():
             ("中期", col2, "2027〜2028年度に本格展開する施策"),
             ("長期", col3, "2029年度以降に成果が出る構造改革"),
         ]:
-            df_ph = df_road[df_road["フェーズ"] == phase][["施策", "時期", "主体"]]
+            df_ph = df_road[df_road["フェーズ"] == phase][["施策", "時期", "主体", "柱"]]
             with col:
                 st.markdown(f"**{phase}（{desc}）**")
                 st.dataframe(df_ph, use_container_width=True, hide_index=True)
 
         st.markdown("---")
-        # 提言書エクスポート
+        st.subheader("支援機関の運用転換")
+        st.markdown("支援機関は従来の経営指導機能を維持しながら、以下の転換を自らの判断で進める。")
+
+        def color_difficulty(val):
+            if val == "低":
+                return "background-color:#c6efce;color:#276221"
+            elif val == "高":
+                return "background-color:#ffc7ce;color:#9c0006"
+            return ""
+
+        styled_reform = df_reform[["現状", "あるべき姿", "実施主体", "難易度"]].style.map(
+            color_difficulty, subset=["難易度"]
+        )
+        st.dataframe(styled_reform, use_container_width=True, hide_index=True)
+
+        st.markdown("---")
+        st.subheader("行政（県庁）への要請事項")
+        requests_data = {
+            "要請事項": [
+                "専門家単価適正化に伴う支援予算の拡充",
+                "企業への直接補助スキームの検討",
+                "事業承継支援への予算措置",
+                "農業・食品加工の販路開拓支援",
+            ],
+            "内容": [
+                "単価引き上げは1件あたりコスト増を招き、同一予算では支援件数が減少する。質の向上を維持しながら支援規模を確保するには予算の裏付けが不可欠",
+                "企業が専門家を直接委託し県が補助する仕組み。市場単価での取引が成立し支援の質が上がる",
+                "M&A仲介費用補助・承継後経営支援への継続的な予算確保",
+                "輸出対応・EC展開に取り組む事業者への集中補助",
+            ],
+            "備考": [
+                "支援機関の実績積み上げ後に説得力を持つ",
+                "支援機関の実績積み上げ後に説得力を持つ",
+                "即時対応可能",
+                "即時対応可能",
+            ],
+        }
+        df_req = pd.DataFrame(requests_data)
+        st.dataframe(df_req, use_container_width=True, hide_index=True)
+
+        st.markdown("---")
         st.subheader("📄 政策提言書エクスポート")
         if st.button("📊 政策提言Excelを生成"):
             buffer = io.BytesIO()
             with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
                 df_prop.to_excel(writer, sheet_name="政策提言一覧", index=False)
                 df_kpi.to_excel(writer, sheet_name="KPI目標", index=False)
-                df_shin.to_excel(writer, sheet_name="診断士アクション", index=False)
-                df_chuo.to_excel(writer, sheet_name="中央会アクション", index=False)
+                df_action.to_excel(writer, sheet_name="能動的支援アクション", index=False)
+                df_reform.to_excel(writer, sheet_name="支援機関運用転換", index=False)
                 df_road.to_excel(writer, sheet_name="ロードマップ", index=False)
             st.download_button(
                 "📥 政策提言書ダウンロード（Excel）",

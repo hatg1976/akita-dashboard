@@ -295,6 +295,11 @@ def get_sample_renewable_energy() -> pd.DataFrame:
 # 政策提言データ（data/policy_cache/policy_data.json から読み込み）
 # ============================================================
 
+def get_policy_cache_raw() -> dict:
+    """policy_data.json の全内容を辞書で返す"""
+    return _load_policy_cache()
+
+
 def get_policy_proposals() -> pd.DataFrame:
     """政策提言一覧（JSONキャッシュ優先）"""
     cache = _load_policy_cache()

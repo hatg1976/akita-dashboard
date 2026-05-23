@@ -30,6 +30,7 @@ from collector import (
     get_policy_kpi,
     get_policy_last_updated,
     get_policy_kpi_note,
+    get_policy_cache_raw,
     get_shindan_actions,
     get_chuokai_actions,
     get_roadmap,
@@ -1129,6 +1130,7 @@ def page_policy():
     df_shin = get_shindan_actions()
     df_chuo = get_chuokai_actions()
     df_road = get_roadmap()
+    _policy_cache = get_policy_cache_raw()
 
     if df_prop.empty:
         st.warning("⚠ 政策データが読み込めませんでした。data/policy_cache/policy_data.json を確認してください。")
@@ -1179,6 +1181,33 @@ def page_policy():
         意欲ある経営者を能動的に発見し、経営課題に応じた深い伴走支援を行うことで、
         地域経済への波及効果を最大化していく。
         """)
+
+        st.markdown("---")
+        st.subheader("なぜ秋田か：固有の優位性")
+        st.markdown("秋田の中小企業が県外・海外と戦える根拠は、**他地域では代替できない固有性**にあります。")
+
+        advantages = _policy_cache.get("akita_advantages", [])
+        if advantages:
+            adv_cols = st.columns(len(advantages))
+            for col, adv in zip(adv_cols, advantages):
+                with col:
+                    st.markdown(f"### {adv['アイコン']} {adv['分野']}")
+                    st.success(f"**強み**\n\n{adv['強み']}")
+                    st.warning(f"**現状の課題**\n\n{adv['課題']}")
+                    st.caption(f"優位の根拠：{adv['優位の根拠']}")
+
+        st.markdown("---")
+        vcg = _policy_cache.get("value_chain_gap", {})
+        if vcg:
+            st.subheader("優位性が収益に結びついていない構造的原因")
+            st.markdown(vcg.get("説明", ""))
+            gaps = vcg.get("ギャップ", [])
+            if gaps:
+                評価色 = {"強い": "🟢", "中程度": "🟡", "弱い": "🔴"}
+                for g in gaps:
+                    badge = 評価色.get(g["評価"], "⚪")
+                    st.markdown(f"**{badge} {g['段階']}**　{g['評価']}　— {g['コメント']}")
+            st.info("💡 支援機関の役割は「生産」から「加工・販売・ブランド管理」へのつなぎ役にある。")
 
         st.markdown("---")
         st.subheader("提言一覧（2柱別）")

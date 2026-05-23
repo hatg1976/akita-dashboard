@@ -1,16 +1,14 @@
-name: HF Spaces 同期
+name: Hugging Face Spaces デプロイ
 
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - 'data/**'
 
 permissions:
   contents: read
 
 jobs:
-  sync:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -1112,7 +1112,7 @@ def page_industry_detail():
 # ============================================================
 def page_policy():
     st.title("🏛️ 政策提言")
-    st.caption("秋田県庁・行政担当者向け戦略提言｜秋田県中小企業団体中央会")
+    st.caption("秋田県庁・行政担当者向け戦略提言｜支援機関（中央会・商工会議所・商工会等）連携")
 
     last_updated = get_policy_last_updated()
     kpi_note = get_policy_kpi_note()
@@ -1166,12 +1166,10 @@ def page_policy():
 
         st.markdown("---")
         st.subheader("前提認識（構造制約）")
-        col1, col2, col3 = st.columns(3)
+        col1, col2 = st.columns(2)
         with col1:
             st.warning("**人口減少は不可逆**\n\n内需縮小前提で戦略を組む。国内需要増は見込まない。")
         with col2:
-            st.warning("**再エネは地域の柱にならない**\n\n電力収益は域外流出。雇用・付加価値創出効果が限定的。")
-        with col3:
             st.warning("**大企業の自然誘致は期待しない**\n\n政策誘致なき大企業立地はない。既存中小企業の強化を優先。")
 
         st.markdown("---")

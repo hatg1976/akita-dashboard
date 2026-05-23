@@ -1112,7 +1112,7 @@ def page_industry_detail():
 # ============================================================
 def page_policy():
     st.title("🏛️ 政策提言")
-    st.caption("秋田県庁・行政担当者向け戦略提言｜支援機関（中央会・商工会議所・商工会等）連携")
+    st.caption("秋田県経済の成長・持続策")
 
     last_updated = get_policy_last_updated()
     kpi_note = get_policy_kpi_note()

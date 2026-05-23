@@ -1275,7 +1275,9 @@ def fetch_openclose_stats(
         source_note: 出典文字列、またはエラー種別文字列
     """
     TARGET_KUBUN = {"存続事業所", "新設事業所", "廃業事業所"}
-    EXCL_INDUSTRY = ("合計", "総数", "全産業", "農林漁業", "農林水産")
+    # 集計行を除外する: "AR全産業", "AB農林漁業", "CR非農林漁業" など
+    # "非農林漁業" は C～R の合計行であり個別業種 C-R と二重計上になるため必ず除外する
+    EXCL_INDUSTRY = ("合計", "総数", "全産業", "農林漁業", "農林水産", "非農林漁業")
 
     if not is_api_key_set():
         return pd.DataFrame(), "no_key"

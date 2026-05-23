@@ -1185,3 +1185,94 @@ def fetch_industry_municipal_matrix() -> tuple[pd.DataFrame, str]:
 
     except Exception:
         return _no_data("api_error")
+
+
+def fetch_openclose_stats(area_code: str = AKITA_AREA_CODE) -> tuple[pd.DataFrame, str]:
+    """
+    令和3年経済センサス-活動調査 産業(大分類)×存続・新設・廃業別 事業所数
+    統計表ID: 0004005659（都道府県・市区町村レベル）
+
+    Returns:
+        (df, source_note)
+        df: DataFrame with columns [産業, 区分, 事業所数]
+            区分: '存続事業所' / '新設事業所' / '廃業事業所'
+        source_note: データ出典文字列（エラー時は "no_key" / "api_error: ..." / "no_data"）
+    """
+    STATS_ID = "0004005659"
+    TARGET_KUBUN = {"存続事業所", "新設事業所", "廃業事業所"}
+
+    if not is_api_key_set():
+        return pd.DataFrame(), "no_key"
+
+    # ── Step1: メタ情報のみ取得（次元コードを把握）──────────────────────────
+    try:
+        _, meta = fetch_stats_data(STATS_ID, area_code=area_code, limit=1)
+    except Exception as e:
+        return pd.DataFrame(), f"api_error: {e}"
+
+    # 経営組織（cat02）等の合計コードを特定して絞り込みパラメータを作る
+    extra: dict = {}
+    for dim_key in ("cat02", "cat04", "cat05"):
+        dim_meta = meta.get(dim_key, {})
+        if not dim_meta:
+            continue
+        # コード "0" / "00" / "000" を合計コードとして優先
+        found = False
+        for zero in ("0", "00", "000"):
+            if zero in dim_meta:
+                api_param = "cdCat" + dim_key[3:].zfill(2)
+                extra[api_param] = zero
+                found = True
+                break
+        if not found:
+            for code, name in dim_meta.items():
+                if name in {"総数", "合計", "計"}:
+                    api_param = "cdCat" + dim_key[3:].zfill(2)
+                    extra[api_param] = code
+                    break
+
+    # tab（事業所数 vs 従業者数）絞り込み
+    for code, name in meta.get("tab", {}).items():
+        if "事業所数" in name and "従業者" not in name:
+            extra["cdTab"] = code
+            break
+
+    # ── Step2: 全データ取得 ──────────────────────────────────────────────────
+    try:
+        df, meta2 = fetch_stats_data(
+            STATS_ID, area_code=area_code, limit=10000, extra_params=extra
+        )
+    except Exception as e:
+        return pd.DataFrame(), f"api_error: {e}"
+
+    if df.empty:
+        return pd.DataFrame(), "no_data"
+
+    cat01_map = meta2.get("cat01", {})
+    cat03_map = meta2.get("cat03", {})
+
+    # 産業・区分ラベルを付与
+    df["産業"] = df["cat01"].map(cat01_map) if "cat01" in df.columns else ""
+    df["区分"] = df["cat03"].map(cat03_map) if "cat03" in df.columns else ""
+
+    # 存続・新設・廃業のみに絞り込み（総数行は除外）
+    df = df[df["区分"].isin(TARGET_KUBUN)].copy()
+
+    # 産業合計行を除外（特定キーワードを含む行）
+    _EXCL = ("合計", "総数", "全産業", "農林漁業", "農林水産")
+    if "産業" in df.columns:
+        df = df[~df["産業"].str.contains("|".join(_EXCL), na=False)].copy()
+
+    if df.empty:
+        return pd.DataFrame(), "no_data"
+
+    result = (
+        df[["産業", "区分", "value"]]
+        .dropna(subset=["産業", "区分", "value"])
+        .rename(columns={"value": "事業所数"})
+        .copy()
+    )
+    result["事業所数"] = result["事業所数"].astype(int)
+
+    source = "令和3年経済センサス-活動調査（2021年）存続・新設・廃業別事業所数（秋田県）"
+    return result, source

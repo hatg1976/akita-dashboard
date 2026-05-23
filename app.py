@@ -64,6 +64,12 @@ def _load_industry_matrix():
     return estat_api.fetch_industry_municipal_matrix()
 
 
+@st.cache_data(ttl=86400 * 30)  # 経済センサスは年次データ・30日キャッシュ
+def _load_openclose_stats():
+    """開業・廃業統計を取得（30日キャッシュ）"""
+    return estat_api.fetch_openclose_stats()
+
+
 def _get_population(area_code: str) -> tuple[pd.DataFrame, str, str]:
     """
     人口データを取得する（優先順位: キャッシュ → 実API → サンプル）
@@ -145,6 +151,7 @@ page = st.sidebar.selectbox(
      "📈 地域市場シェア分析",
      "🏛️ 政策提言", "💴 補助金カレンダー",
      "🏢 組織成熟度診断",
+     "📉 開業・廃業動態",
      "🔌 e-Stat API連携"],
 )
 
@@ -3817,6 +3824,227 @@ _VALUE_CHAIN_DATA: dict = {}   # 旧データ（未使用・互換性維持）
 # 組織成熟度診断ページ
 # ============================================================
 
+def page_openclose():
+    """開業・廃業動態ページ（経済センサス2021 存続・新設・廃業別事業所数）"""
+    st.title("📉 開業・廃業動態（秋田県）")
+    st.markdown("令和3年経済センサス-活動調査をもとに、業種別の新設・廃業事業所数と開廃業率を表示します。")
+    st.markdown("---")
+
+    # ── データ取得 ────────────────────────────────────────────────────────
+    if not estat_api.is_api_key_set():
+        st.warning("e-Stat APIキーが設定されていません。「🔌 e-Stat API連携」ページで設定してください。")
+        return
+
+    with st.spinner("e-Stat からデータ取得中…"):
+        df, source = _load_openclose_stats()
+
+    if df.empty:
+        if source == "no_key":
+            st.warning("APIキーが設定されていません。")
+        elif source == "no_data":
+            st.error("データが取得できませんでした（秋田県の対象データがありません）。")
+        else:
+            st.error(f"取得エラー: {source}")
+        return
+
+    st.caption(f"出典: {source}")
+
+    # ── ピボット（産業×区分）────────────────────────────────────────────
+    df_pivot = df.pivot_table(
+        index="産業", columns="区分", values="事業所数", aggfunc="sum"
+    ).fillna(0).astype(int)
+
+    # 存続・新設・廃業の列を確保（なければ 0 で補完）
+    for col in ["存続事業所", "新設事業所", "廃業事業所"]:
+        if col not in df_pivot.columns:
+            df_pivot[col] = 0
+
+    # 開廃業率（%）の計算
+    # 開業率 = 新設 / (存続 + 新設) × 100
+    # 廃業率 = 廃業 / (存続 + 廃業) × 100
+    df_pivot["開業率(%)"] = (
+        df_pivot["新設事業所"] / (df_pivot["存続事業所"] + df_pivot["新設事業所"]).replace(0, pd.NA) * 100
+    ).round(1)
+    df_pivot["廃業率(%)"] = (
+        df_pivot["廃業事業所"] / (df_pivot["存続事業所"] + df_pivot["廃業事業所"]).replace(0, pd.NA) * 100
+    ).round(1)
+
+    # ── KPI ──────────────────────────────────────────────────────────────
+    total_new   = int(df_pivot["新設事業所"].sum())
+    total_close = int(df_pivot["廃業事業所"].sum())
+    total_exist = int(df_pivot["存続事業所"].sum())
+    net = total_new - total_close
+
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("存続事業所数", f"{total_exist:,}")
+    k2.metric("新設事業所数（開業）", f"{total_new:,}", delta=f"+{total_new:,}")
+    k3.metric("廃業事業所数", f"{total_close:,}", delta=f"{-total_close:,}", delta_color="inverse")
+    k4.metric(
+        "純増減（新設－廃業）",
+        f"{net:+,}",
+        delta=f"{'増加' if net >= 0 else '減少'}",
+        delta_color="normal" if net >= 0 else "inverse",
+    )
+
+    st.markdown("---")
+
+    # ── タブ: 事業所数 / 開廃業率 ────────────────────────────────────────
+    tab_count, tab_rate, tab_data = st.tabs(["📊 業種別 新設・廃業数", "📈 業種別 開廃業率", "🗒️ データ一覧"])
+
+    # 産業名を短縮表示用に整形（長い名称の先頭30文字）
+    df_plot = df_pivot.reset_index()
+    df_plot["産業短"] = df_plot["産業"].str[:22]
+
+    with tab_count:
+        st.subheader("業種別 新設・廃業事業所数")
+
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            name="新設事業所",
+            x=df_plot["産業短"],
+            y=df_plot["新設事業所"],
+            marker_color="#1565C0",
+            text=df_plot["新設事業所"],
+            textposition="outside",
+        ))
+        fig.add_trace(go.Bar(
+            name="廃業事業所",
+            x=df_plot["産業短"],
+            y=df_plot["廃業事業所"],
+            marker_color="#C62828",
+            text=df_plot["廃業事業所"],
+            textposition="outside",
+        ))
+        fig.update_layout(
+            barmode="group",
+            height=480,
+            xaxis_tickangle=-40,
+            yaxis_title="事業所数（件）",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            margin=dict(t=40, b=120, l=60, r=20),
+            plot_bgcolor="white",
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+        # 純増減バー
+        st.subheader("業種別 純増減（新設－廃業）")
+        df_plot["純増減"] = df_plot["新設事業所"] - df_plot["廃業事業所"]
+        colors = ["#1565C0" if v >= 0 else "#C62828" for v in df_plot["純増減"]]
+        fig2 = go.Figure(go.Bar(
+            x=df_plot["産業短"],
+            y=df_plot["純増減"],
+            marker_color=colors,
+            text=df_plot["純増減"].apply(lambda v: f"{v:+d}"),
+            textposition="outside",
+        ))
+        fig2.update_layout(
+            height=380,
+            xaxis_tickangle=-40,
+            yaxis_title="純増減（件）",
+            yaxis=dict(zeroline=True, zerolinecolor="#888"),
+            margin=dict(t=20, b=120, l=60, r=20),
+            plot_bgcolor="white",
+        )
+        st.plotly_chart(fig2, use_container_width=True)
+
+    with tab_rate:
+        st.subheader("業種別 開業率・廃業率（%）")
+        st.caption("開業率 = 新設事業所 ÷（存続＋新設）×100　　廃業率 = 廃業事業所 ÷（存続＋廃業）×100")
+
+        fig3 = go.Figure()
+        fig3.add_trace(go.Bar(
+            name="開業率(%)",
+            x=df_plot["産業短"],
+            y=df_plot["開業率(%)"],
+            marker_color="#1565C0",
+            text=df_plot["開業率(%)"].apply(lambda v: f"{v:.1f}%" if pd.notna(v) else ""),
+            textposition="outside",
+        ))
+        fig3.add_trace(go.Bar(
+            name="廃業率(%)",
+            x=df_plot["産業短"],
+            y=df_plot["廃業率(%)"],
+            marker_color="#C62828",
+            text=df_plot["廃業率(%)"].apply(lambda v: f"{v:.1f}%" if pd.notna(v) else ""),
+            textposition="outside",
+        ))
+        fig3.update_layout(
+            barmode="group",
+            height=480,
+            xaxis_tickangle=-40,
+            yaxis_title="率（%）",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            margin=dict(t=40, b=120, l=60, r=20),
+            plot_bgcolor="white",
+        )
+        st.plotly_chart(fig3, use_container_width=True)
+
+        # 開業率 vs 廃業率 散布図
+        st.subheader("開業率 vs 廃業率 ポジショニング")
+        st.caption("右上ほど新陳代謝が活発、左下ほど固定的な業種構造を示す。")
+        fig4 = px.scatter(
+            df_plot.dropna(subset=["開業率(%)", "廃業率(%)"]),
+            x="廃業率(%)",
+            y="開業率(%)",
+            text="産業短",
+            color="純増減",
+            color_continuous_scale="RdYlBu",
+            size_max=20,
+        )
+        fig4.update_traces(textposition="top center", marker_size=12)
+        # 対角線（開業率＝廃業率）
+        max_rate = max(
+            df_plot["開業率(%)"].dropna().max(),
+            df_plot["廃業率(%)"].dropna().max(),
+        ) + 1
+        fig4.add_shape(
+            type="line", x0=0, y0=0, x1=max_rate, y1=max_rate,
+            line=dict(color="#888", dash="dash", width=1),
+        )
+        fig4.add_annotation(
+            x=max_rate * 0.8, y=max_rate * 0.8 + 0.5,
+            text="開業率＝廃業率", showarrow=False,
+            font=dict(size=10, color="#888"),
+        )
+        fig4.update_layout(
+            height=440,
+            margin=dict(t=30, b=60, l=60, r=20),
+            plot_bgcolor="white",
+        )
+        st.plotly_chart(fig4, use_container_width=True)
+
+    with tab_data:
+        st.subheader("業種別 詳細データ")
+        display_df = df_pivot[["存続事業所", "新設事業所", "廃業事業所", "開業率(%)", "廃業率(%)"]].copy()
+        display_df.index.name = "産業（大分類）"
+        st.dataframe(
+            display_df.style.format({
+                "存続事業所": "{:,}",
+                "新設事業所": "{:,}",
+                "廃業事業所": "{:,}",
+                "開業率(%)": "{:.1f}%",
+                "廃業率(%)": "{:.1f}%",
+            }),
+            use_container_width=True,
+        )
+        # CSV ダウンロード
+        csv = display_df.reset_index().to_csv(index=False, encoding="utf-8-sig")
+        st.download_button(
+            "⬇ CSV ダウンロード",
+            data=csv,
+            file_name="akita_openclose_2021.csv",
+            mime="text/csv",
+        )
+
+        st.info(
+            "💡 **読み方のヒント**\n"
+            "- 廃業率が高い業種 → 後継者問題・経営難が深刻な可能性\n"
+            "- 開業率が高い業種 → 新規参入が活発・競合増加の可能性\n"
+            "- 純増減がマイナス → 業種全体の事業所数が減少傾向\n\n"
+            "※ 経済センサスは2016年→2021年の変化を比較しています。"
+        )
+
+
 def page_maturity_diagnosis():
     st.title("🏢 組織成熟度診断")
     st.markdown("経営管理の現状を5項目でチェックし、組織の成熟度と財務状況を可視化します。")
@@ -4096,5 +4324,7 @@ elif page == "💴 補助金カレンダー":
     page_subsidies()
 elif page == "🏢 組織成熟度診断":
     page_maturity_diagnosis()
+elif page == "📉 開業・廃業動態":
+    page_openclose()
 elif page == "🔌 e-Stat API連携":
     page_estat()

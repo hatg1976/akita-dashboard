@@ -2942,7 +2942,7 @@ def page_industry_matrix():
     st.markdown("---")
     st.markdown("#### 産業大分類 × 市町村 事業所数マトリックス")
 
-    tab_count, tab_pct = st.tabs(["📊 事業所数（実数）", "📈 構成比（%）"])
+    tab_count, tab_pct, tab_heat = st.tabs(["📊 事業所数（実数）", "📈 構成比（%）", "🔥 ヒートマップ"])
 
     # ---- スタイル関数 ----
     def _style_count_row(row):
@@ -3031,6 +3031,61 @@ def page_industry_matrix():
         )
         st.dataframe(styled_pct, use_container_width=True, height=min(50 + len(df_display) * 35, 700))
         st.caption("色が濃いほど割合が高い（濃青≥20%、青≥10%、水色≥5%、薄水色≥1%）")
+
+    # ---- タブ③：ヒートマップ ----
+    with tab_heat:
+        heat_col1, heat_col2, heat_col3 = st.columns(3)
+        with heat_col1:
+            heat_norm = st.selectbox(
+                "表示方法",
+                ["事業所数（実数）", "市町村内構成比（%）", "業種内シェア（%）"],
+                key="heat_norm",
+            )
+        with heat_col2:
+            heat_color = st.selectbox(
+                "カラースケール",
+                ["Blues", "YlOrRd", "Viridis", "RdYlGn"],
+                key="heat_color",
+            )
+        with heat_col3:
+            heat_annot = st.checkbox("数値を表示", value=True, key="heat_annot")
+
+        # ヒートマップ用数値マトリックス（合計行・合計列を除く）
+        df_heat_base = df_pivot.loc[row_sel, col_sel].copy()
+        df_heat_num = df_heat_base.apply(lambda col: col.map(_to_int))
+
+        if heat_norm == "市町村内構成比（%）":
+            col_totals_h = df_heat_num.sum(axis=0).replace(0, 1)
+            df_heat_val = (df_heat_num.div(col_totals_h, axis=1) * 100).round(1)
+            heat_label = "構成比（%）"
+            heat_fmt = ".1f"
+        elif heat_norm == "業種内シェア（%）":
+            row_totals_h = df_heat_num.sum(axis=1).replace(0, 1)
+            df_heat_val = (df_heat_num.div(row_totals_h, axis=0) * 100).round(1)
+            heat_label = "業種内シェア（%）"
+            heat_fmt = ".1f"
+        else:
+            df_heat_val = df_heat_num
+            heat_label = "事業所数（所）"
+            heat_fmt = "d"
+
+        fig_heat = px.imshow(
+            df_heat_val,
+            color_continuous_scale=heat_color,
+            aspect="auto",
+            text_auto=heat_fmt if heat_annot else False,
+            labels={"color": heat_label, "x": "市町村", "y": "産業大分類"},
+            title=f"産業大分類 × 市町村  ―  {heat_label}",
+        )
+        fig_heat.update_layout(
+            height=max(400, len(row_sel) * 30 + 120),
+            xaxis_tickangle=-35,
+            coloraxis_colorbar=dict(title=heat_label),
+            font=dict(size=10),
+        )
+        fig_heat.update_traces(textfont_size=9)
+        st.plotly_chart(fig_heat, use_container_width=True)
+        st.caption("💡 セルにカーソルを当てると詳細値が表示されます。マウスドラッグでズーム可能です。")
 
     # ---- CSVダウンロード ----
     st.download_button(

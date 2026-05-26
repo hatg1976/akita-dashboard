@@ -17,6 +17,7 @@ from collector import (
     get_national_population,
     get_sample_migration,
     get_sample_industry,
+    get_sample_worker_trend,
     get_sample_economy,
     get_sample_municipal,
     get_sample_food_manufacturing,
@@ -399,6 +400,105 @@ def page_population():
         fig.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
         fig.update_layout(height=350)
         st.plotly_chart(fig, use_container_width=True)
+
+    # ── 生産年齢人口・従業者数の推移 ────────────────────────────
+    st.markdown("---")
+    st.subheader("生産年齢人口と従業者数の推移")
+    st.caption("出典: 国勢調査（総務省）・経済センサス（経産省）| サンプルデータ")
+
+    df_wt = get_sample_worker_trend()
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=df_pop["年"], y=df_pop["生産年齢人口（万人）"],
+            name="生産年齢人口（15-64歳）",
+            mode="lines+markers",
+            line=dict(color="#1f77b4", width=3),
+            marker=dict(size=8),
+            fill="tozeroy",
+            fillcolor="rgba(31,119,180,0.10)",
+        ))
+        fig.update_layout(
+            title="生産年齢人口の推移",
+            height=360,
+            yaxis=dict(title="万人", range=[0, 90]),
+            xaxis_title="年",
+            margin=dict(b=10),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        chg_pop = (df_pop["生産年齢人口（万人）"].iloc[-1] / df_pop["生産年齢人口（万人）"].iloc[0] - 1) * 100
+        st.metric(
+            "1990年→2023年",
+            f"{df_pop['生産年齢人口（万人）'].iloc[-1]}万人",
+            delta=f"{chg_pop:.1f}%（1990年比）",
+            delta_color="inverse",
+        )
+
+    with col2:
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            x=df_wt["年"], y=df_wt["第一次産業（万人）"],
+            name="第一次産業（農林水産）", marker_color="#2ca02c",
+        ))
+        fig.add_trace(go.Bar(
+            x=df_wt["年"], y=df_wt["第二次産業（万人）"],
+            name="第二次産業（建設・製造）", marker_color="#1f4e79",
+        ))
+        fig.add_trace(go.Bar(
+            x=df_wt["年"], y=df_wt["第三次産業（万人）"],
+            name="第三次産業（サービス等）", marker_color="#ff7f0e",
+        ))
+        fig.update_layout(
+            title="従業者数の推移（産業別）",
+            barmode="stack",
+            height=360,
+            yaxis_title="万人",
+            xaxis_title="年",
+            legend=dict(orientation="h", y=-0.28, font=dict(size=10)),
+            margin=dict(b=60),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        chg_wt = (df_wt["従業者数合計（万人）"].iloc[-1] / df_wt["従業者数合計（万人）"].iloc[0] - 1) * 100
+        st.metric(
+            "1990年→2023年",
+            f"{df_wt['従業者数合計（万人）'].iloc[-1]}万人",
+            delta=f"{chg_wt:.1f}%（1990年比）",
+            delta_color="inverse",
+        )
+
+    # 両指標の並走比較グラフ
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=df_pop["年"], y=df_pop["生産年齢人口（万人）"],
+        name="生産年齢人口（15-64歳）",
+        mode="lines+markers",
+        line=dict(color="#1f77b4", width=2),
+        marker=dict(size=6),
+    ))
+    fig.add_trace(go.Scatter(
+        x=df_wt["年"], y=df_wt["従業者数合計（万人）"],
+        name="従業者数合計",
+        mode="lines+markers",
+        line=dict(color="#d62728", width=2, dash="dot"),
+        marker=dict(size=6),
+    ))
+    fig.update_layout(
+        title="生産年齢人口 vs 従業者数（推移比較）",
+        height=300,
+        yaxis=dict(title="万人", rangemode="tozero"),
+        legend=dict(orientation="h", y=-0.30, font=dict(size=11)),
+        margin=dict(b=70),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    st.info(
+        "💡 **診断士の着眼点** — "
+        "生産年齢人口（15-64歳）は1990年の79.5万人から2023年には43.5万人へと約**45%減少**。"
+        "従業者数も同期間に約**33%減少**しており、労働力供給の構造的縮小が秋田県経済の根本課題です。"
+        "第一次・第二次産業の落ち込みが特に顕著で、第三次産業への雇用シフトも限界に近づいています。"
+    )
 
     # データテーブル
     st.subheader("人口データ一覧")

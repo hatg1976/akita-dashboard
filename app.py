@@ -4548,19 +4548,19 @@ def page_labor_market():
         c3.metric("全国加重平均", f"{national_avg:,}円",
                   delta=f"秋田比 ▲{national_avg - akita_wage}円", delta_color="off")
 
-        # 全47都道府県 横棒グラフ
-        df_plot = df_all.sort_values("最低賃金（円）", ascending=True)
-        fig_all = px.bar(
-            df_plot, x="最低賃金（円）", y="都道府県",
+        # 全47都道府県 横棒グラフ（go.Bar で色グループ化を防ぐ）
+        df_plot = df_all.sort_values("最低賃金（円）", ascending=True).reset_index(drop=True)
+        fig_all = go.Figure(go.Bar(
+            x=df_plot["最低賃金（円）"],
+            y=df_plot["都道府県"],
             orientation="h",
-            color="色",
-            color_discrete_map="identity",
-            text="最低賃金（円）",
-        )
+            marker_color=df_plot["色"].tolist(),
+            text=[f"{v:,}円" for v in df_plot["最低賃金（円）"]],
+            textposition="outside",
+        ))
         fig_all.add_vline(x=national_avg, line_dash="dash", line_color="#7f8c8d",
                           annotation_text=f"全国加重平均 {national_avg}円",
                           annotation_position="top right")
-        fig_all.update_traces(texttemplate="%{text:,}円", textposition="outside")
         fig_all.update_layout(
             height=1100,
             showlegend=False,
@@ -4578,15 +4578,16 @@ def page_labor_market():
         # ── 東北6県 比較 ──────────────────────────────────────────
         st.subheader("🌾 東北6県 最低賃金比較（2025年度）")
         tohoku = ["青森県","岩手県","宮城県","秋田県","山形県","福島県"]
-        df_tohoku = df_all[df_all["都道府県"].isin(tohoku)].sort_values("最低賃金（円）", ascending=False)
-        fig_t = px.bar(
-            df_tohoku, x="都道府県", y="最低賃金（円）",
-            color="色", color_discrete_map="identity",
-            text="最低賃金（円）",
-        )
+        df_tohoku = df_all[df_all["都道府県"].isin(tohoku)].sort_values("最低賃金（円）", ascending=False).reset_index(drop=True)
+        fig_t = go.Figure(go.Bar(
+            x=df_tohoku["都道府県"],
+            y=df_tohoku["最低賃金（円）"],
+            marker_color=df_tohoku["色"].tolist(),
+            text=[f"{v:,}円" for v in df_tohoku["最低賃金（円）"]],
+            textposition="outside",
+        ))
         fig_t.add_hline(y=national_avg, line_dash="dash", line_color="#7f8c8d",
                         annotation_text=f"全国加重平均 {national_avg}円")
-        fig_t.update_traces(texttemplate="%{text:,}円", textposition="outside")
         fig_t.update_layout(
             height=340, showlegend=False,
             yaxis=dict(range=[1000, 1100], title="円"),

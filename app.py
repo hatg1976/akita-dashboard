@@ -53,6 +53,7 @@ from collector import (
     # 労働市場
     get_minimum_wage_akita,
     get_job_opening_ratio_akita,
+    load_cached_minimum_wage,
 )
 
 @st.cache_data(ttl=86400)
@@ -4521,6 +4522,86 @@ def page_labor_market():
 - 最低賃金を30〜90円以上引き上げた場合に設備投資費用を補助
 - 補助率：最大9/10、上限：最大600万円
 """)
+
+    st.markdown("---")
+
+    # ── 都道府県別 最低賃金ランキング ────────────────────────────
+    st.subheader("🗾 都道府県別 最低賃金ランキング（2025年度）")
+
+    wage_data, wage_year, wage_fetched = load_cached_minimum_wage()
+    if not wage_data:
+        st.warning("最低賃金データが未取得です。fetch_labor_data.py を実行してください。")
+    else:
+        df_all = pd.DataFrame(wage_data).sort_values("最低賃金（円）", ascending=False).reset_index(drop=True)
+        df_all["順位"] = df_all.index + 1
+        df_all["色"] = df_all["都道府県"].apply(
+            lambda x: "#c0392b" if x == "秋田県" else (
+                "#e67e22" if x in ["青森県","岩手県","宮城県","山形県","福島県"] else "#2980b9"
+            )
+        )
+        # 秋田の順位
+        akita_rank = df_all[df_all["都道府県"] == "秋田県"]["順位"].iloc[0]
+        akita_wage = df_all[df_all["都道府県"] == "秋田県"]["最低賃金（円）"].iloc[0]
+        national_avg = 1121
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("秋田県の全国順位", f"{akita_rank}位 / 47都道府県",
+                  delta=f"{akita_wage}円（全国加重平均比 ▲{national_avg - akita_wage}円）",
+                  delta_color="inverse")
+        c2.metric("全国最高（東京都）", "1,226円",
+                  delta=f"秋田比 +{1226 - akita_wage}円", delta_color="off")
+        c3.metric("全国加重平均", f"{national_avg:,}円",
+                  delta=f"秋田比 ▲{national_avg - akita_wage}円", delta_color="off")
+
+        # 全47都道府県 横棒グラフ
+        df_plot = df_all.sort_values("最低賃金（円）", ascending=True)
+        fig_all = px.bar(
+            df_plot, x="最低賃金（円）", y="都道府県",
+            orientation="h",
+            color="色",
+            color_discrete_map="identity",
+            text="最低賃金（円）",
+        )
+        fig_all.add_vline(x=national_avg, line_dash="dash", line_color="#7f8c8d",
+                          annotation_text=f"全国加重平均 {national_avg}円",
+                          annotation_position="top right")
+        fig_all.update_traces(texttemplate="%{text:,}円", textposition="outside")
+        fig_all.update_layout(
+            height=1100,
+            showlegend=False,
+            xaxis=dict(range=[980, 1280], title="円"),
+            margin=dict(r=80, t=10, b=10),
+        )
+        st.plotly_chart(fig_all, use_container_width=True)
+        st.caption(
+            f"出典：厚生労働省「地域別最低賃金額改定状況」（{wage_year}）｜"
+            "赤：秋田県、橙：東北6県、青：その他。"
+            f"データ更新日：{wage_fetched}"
+        )
+
+        st.markdown("---")
+        # ── 東北6県 比較 ──────────────────────────────────────────
+        st.subheader("🌾 東北6県 最低賃金比較（2025年度）")
+        tohoku = ["青森県","岩手県","宮城県","秋田県","山形県","福島県"]
+        df_tohoku = df_all[df_all["都道府県"].isin(tohoku)].sort_values("最低賃金（円）", ascending=False)
+        fig_t = px.bar(
+            df_tohoku, x="都道府県", y="最低賃金（円）",
+            color="色", color_discrete_map="identity",
+            text="最低賃金（円）",
+        )
+        fig_t.add_hline(y=national_avg, line_dash="dash", line_color="#7f8c8d",
+                        annotation_text=f"全国加重平均 {national_avg}円")
+        fig_t.update_traces(texttemplate="%{text:,}円", textposition="outside")
+        fig_t.update_layout(
+            height=340, showlegend=False,
+            yaxis=dict(range=[1000, 1100], title="円"),
+            margin=dict(t=10, b=10),
+        )
+        st.plotly_chart(fig_t, use_container_width=True)
+        st.caption(
+            "東北6県はいずれも全国加重平均（1,121円）を下回っており、"
+            "地域間格差が賃金水準に直結しています。"
+        )
 
 
 def page_maturity_diagnosis():

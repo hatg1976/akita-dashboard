@@ -1782,3 +1782,24 @@ def get_job_opening_ratio_akita() -> pd.DataFrame:
         "秋田県（倍）": [1.30, 1.20],
     }
     return pd.DataFrame(data)
+
+
+# ============================================================
+# 労働市場キャッシュ読み込み
+# ============================================================
+
+_LABOR_CACHE_DIR = Path(__file__).parent / "data" / "labor_cache"
+
+def load_cached_minimum_wage() -> tuple[list, str, str]:
+    """
+    最低賃金（全都道府県）をキャッシュJSONから読み込む。
+    Returns: (data_list, year_str, fetched_at)
+    """
+    cache_path = _LABOR_CACHE_DIR / "minimum_wage.json"
+    if cache_path.exists():
+        try:
+            cache = json.loads(cache_path.read_text(encoding="utf-8"))
+            return cache.get("data", []), cache.get("year", ""), cache.get("fetched_at", "")
+        except Exception:
+            pass
+    return [], "", ""

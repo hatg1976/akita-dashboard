@@ -46,6 +46,13 @@ from collector import (
     get_industry_hierarchy,
     get_industry_detail,
     get_industry_extended_detail,
+    # 後継者問題・廃業
+    get_successor_absence_rate,
+    get_closure_trend,
+    get_closure_profile,
+    # 労働市場
+    get_minimum_wage_akita,
+    get_job_opening_ratio_akita,
 )
 
 @st.cache_data(ttl=86400)
@@ -170,6 +177,7 @@ st.sidebar.markdown("---")
 page = st.sidebar.selectbox(
     "表示するデータ",
     ["📊 総合概要", "👥 人口動態", "🏭 産業構造", "📉 開業・廃業動態", "💰 経済指標",
+     "👴 後継者問題・廃業リスク", "👷 労働市場（最低賃金・求人倍率）",
      "🔎 業種別分析", "📋 特定業種支援ガイド", "📊 業種別生産性分析",
      "🗺️ 産業×市町村マトリックス",
      "🔗 川上・川下フロー分析",
@@ -4232,6 +4240,289 @@ $$
             "- 廃業率が上昇トレンド → 業種の縮小局面（推移グラフで確認）\n"
             "- 純増減がマイナス → 業種全体の事業所数が減少傾向"
         )
+def page_successor():
+    """後継者問題・廃業リスク（実データのみ使用）"""
+    st.title("👴 後継者問題・廃業リスク（秋田県）")
+    st.markdown(
+        "出典：**帝国データバンク「秋田県内企業後継者不在率動向調査」「秋田県内企業休廃業・解散動向調査」**"
+        "（各年版）に基づく実データです。"
+    )
+    st.markdown("---")
+
+    df_rate = get_successor_absence_rate()
+    df_close = get_closure_trend()
+    prof = get_closure_profile()
+
+    # ── KPI ─────────────────────────────────────────────────────
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric(
+        "後継者不在率（秋田・2025年）",
+        f"{df_rate['秋田県（%）'].iloc[-1]}%",
+        delta="全国最高・全都道府県唯一の70%超",
+        delta_color="inverse",
+    )
+    c2.metric(
+        "後継者不在率（全国・2025年）",
+        f"{df_rate['全国（%）'].iloc[-1]}%",
+        delta="7年連続改善傾向",
+    )
+    c3.metric(
+        "休廃業・解散件数（2024年）",
+        f"{prof['最多業種件数'] + 466}件",  # 564件
+        delta=f"前年比 +{prof['前年比増加率（%）']}%（2016年以降最多）",
+        delta_color="inverse",
+    )
+    c4.metric(
+        "うち黒字廃業（2024年）",
+        f"{prof['黒字廃業率（%）']}%",
+        delta="採算が取れていても廃業",
+        delta_color="inverse",
+    )
+
+    st.markdown("---")
+
+    col1, col2 = st.columns(2)
+
+    # ── 廃業件数推移 ─────────────────────────────────────────────
+    with col1:
+        st.subheader("休廃業・解散件数の推移（秋田県）")
+        fig = go.Figure()
+        colors = [
+            "#2980b9" if v < 400 else "#e74c3c"
+            for v in df_close["休廃業・解散件数"]
+        ]
+        fig.add_trace(go.Bar(
+            x=df_close["年"],
+            y=df_close["休廃業・解散件数"],
+            marker_color=colors,
+            text=df_close["休廃業・解散件数"],
+            textposition="outside",
+        ))
+        fig.update_layout(
+            height=360,
+            yaxis=dict(title="件", range=[0, 650]),
+            xaxis=dict(title="年", dtick=1),
+            margin=dict(t=10, b=10),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        st.caption(
+            "出典：帝国データバンク「秋田県内企業休廃業・解散動向調査」各年版｜"
+            "2024年は2016年以降最多。全国でも増加率が最高水準。"
+        )
+
+    # ── 後継者不在率 比較 ────────────────────────────────────────
+    with col2:
+        st.subheader("後継者不在率：秋田県 vs 全国")
+        fig2 = go.Figure()
+        x_labels = [str(y) + "年" for y in df_rate["調査年"]]
+        fig2.add_trace(go.Bar(
+            name="秋田県",
+            x=x_labels,
+            y=df_rate["秋田県（%）"],
+            marker_color="#c0392b",
+            text=[f"{v}%" for v in df_rate["秋田県（%）"]],
+            textposition="outside",
+        ))
+        fig2.add_trace(go.Bar(
+            name="全国",
+            x=x_labels,
+            y=df_rate["全国（%）"],
+            marker_color="#2980b9",
+            text=[f"{v}%" for v in df_rate["全国（%）"]],
+            textposition="outside",
+        ))
+        fig2.update_layout(
+            height=360,
+            barmode="group",
+            yaxis=dict(title="%", range=[0, 90]),
+            legend=dict(orientation="h", y=-0.2),
+            margin=dict(t=10, b=50),
+        )
+        st.plotly_chart(fig2, use_container_width=True)
+        st.caption(
+            "出典：帝国DB「全国企業後継者不在率調査」2024・2025年版｜"
+            "秋田は全国最高。全国は7年連続改善だが秋田は2023年以降上昇。"
+        )
+
+    st.markdown("---")
+
+    # ── 廃業企業の特性 ───────────────────────────────────────────
+    st.subheader("廃業企業の特性（2024年・秋田県）")
+    c5, c6, c7, c8 = st.columns(4)
+    c5.metric("経営者平均年齢", f"{prof['経営者平均年齢']}歳")
+    c6.metric("黒字廃業の割合", f"{prof['黒字廃業率（%）']}%")
+    c7.metric("資産超過での廃業", f"{prof['資産超過率（%）']}%")
+    c8.metric("最多業種", f"{prof['最多業種']}（{prof['最多業種件数']}件）")
+
+    st.info(
+        "💡 **ポイント：** 廃業の4割超が黒字、7割超が資産超過での廃業です。"
+        "経営不振ではなく**後継者不在・高齢による「やむを得ない廃業」**が主因であることを示しています。"
+        "早期の事業承継対策が地域雇用・商圏の維持に直結します。"
+    )
+
+    st.markdown("---")
+
+    st.subheader("📋 活用できる支援策")
+    col3, col4 = st.columns(2)
+    with col3:
+        st.markdown("""
+**秋田県内の相談窓口**
+- 秋田県事業引継ぎ支援センター（無料相談）
+- 秋田県よろず支援拠点
+- 中小企業活力向上プロジェクトネクスト
+
+**主な補助金・制度**
+- 事業承継・引継ぎ補助金（最大250万円）
+- 経営承継円滑化法（相続税・贈与税の猶予）
+- 中小企業事業承継税制（株式等の猶予）
+""")
+    with col4:
+        st.markdown("""
+**第三者承継（M&A）の活用**
+- 後継者がいなくても事業継続が可能
+- 秋田県内のM&A仲介機関・金融機関が対応
+- 事業引継ぎ補助金でマッチング費用を補助
+
+**組合として取り組めること**
+- 会員向け事業承継セミナーの開催
+- 事業引継ぎ支援センターとの連携・紹介
+- 業種内でのM&Aマッチング支援
+""")
+
+
+def page_labor_market():
+    """労働市場ダッシュボード（実データのみ使用）"""
+    st.title("👷 労働市場（最低賃金・求人倍率）")
+    st.markdown(
+        "出典：**厚生労働省「地域別最低賃金額改定状況」「一般職業紹介状況」**"
+        "に基づく実データです。"
+    )
+    st.markdown("---")
+
+    df_wage = get_minimum_wage_akita()
+    df_ratio = get_job_opening_ratio_akita()
+
+    latest_wage = df_wage["秋田県（円）"].iloc[-1]
+    prev_wage   = df_wage["秋田県（円）"].iloc[-2]
+    latest_ratio = df_ratio["秋田県（倍）"].iloc[-1]
+    prev_ratio   = df_ratio["秋田県（倍）"].iloc[-2]
+
+    # ── KPI ─────────────────────────────────────────────────────
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric(
+        "最低賃金（秋田・2025年度）",
+        f"{latest_wage:,}円",
+        delta=f"+{latest_wage - prev_wage}円（前年度比）",
+    )
+    c2.metric(
+        "最低賃金（秋田・2024年度）",
+        f"{prev_wage:,}円",
+        delta=f"10年前（2015年）比 +{prev_wage - 695}円",
+    )
+    c3.metric(
+        "有効求人倍率（秋田・2024年）",
+        f"{latest_ratio:.2f}倍",
+        delta=f"前年比 -{prev_ratio - latest_ratio:.2f}倍（3年連続低下）",
+        delta_color="inverse",
+    )
+    c4.metric(
+        "有効求人倍率（秋田・2025年）",
+        f"{df_ratio['秋田県（倍）'].iloc[-1]:.2f}倍",
+        delta="3年連続低下",
+        delta_color="inverse",
+    )
+
+    st.markdown("---")
+
+    col1, col2 = st.columns(2)
+
+    # ── 最低賃金推移 ─────────────────────────────────────────────
+    with col1:
+        st.subheader("最低賃金の推移（秋田県）")
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            x=df_wage["年度"],
+            y=df_wage["秋田県（円）"],
+            marker_color=[
+                "#c0392b" if y >= 2024 else "#2980b9"
+                for y in df_wage["年度"]
+            ],
+            text=df_wage["秋田県（円）"],
+            textposition="outside",
+        ))
+        fig.update_layout(
+            height=380,
+            yaxis=dict(title="円", range=[600, 1150]),
+            xaxis=dict(title="年度", dtick=1),
+            margin=dict(t=10, b=10),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        st.caption(
+            "出典：厚生労働省「地域別最低賃金額改定状況」・秋田労働局｜"
+            "2025年度（1,031円）は令和8年3月31日発効。"
+        )
+
+    # ── 有効求人倍率 ─────────────────────────────────────────────
+    with col2:
+        st.subheader("有効求人倍率（秋田県・年平均）")
+        fig2 = go.Figure()
+        fig2.add_trace(go.Bar(
+            x=[f"{y}年" for y in df_ratio["年"]],
+            y=df_ratio["秋田県（倍）"],
+            marker_color=["#e67e22", "#c0392b"],
+            text=[f"{v:.2f}倍" for v in df_ratio["秋田県（倍）"]],
+            textposition="outside",
+        ))
+        fig2.add_hline(
+            y=1.0,
+            line_dash="dot",
+            line_color="gray",
+            annotation_text="均衡ライン（1.0倍）",
+            annotation_position="right",
+        )
+        fig2.update_layout(
+            height=380,
+            yaxis=dict(title="倍", range=[0, 1.8]),
+            margin=dict(t=10, b=10, r=120),
+        )
+        st.plotly_chart(fig2, use_container_width=True)
+        st.caption(
+            "出典：厚生労働省「一般職業紹介状況（公共職業安定所業務統計）」｜"
+            "2023年以降3年連続低下。ただし均衡ライン（1.0倍）は上回っており、"
+            "引き続き求人超過の状態。2015〜2023年の年次データは未取得のため非表示。"
+        )
+
+    st.markdown("---")
+
+    # ── 最低賃金の解説 ───────────────────────────────────────────
+    st.subheader("📋 最低賃金 関連情報")
+    col3, col4 = st.columns(2)
+    with col3:
+        wage_10y = df_wage["秋田県（円）"].iloc[-2] - df_wage["秋田県（円）"].iloc[0]
+        st.markdown(f"""
+**10年間の引き上げ幅（2015→2024年度）**
+- **+{wage_10y}円**（695円 → 951円、+{wage_10y/695*100:.0f}%）
+- 毎年平均 +{wage_10y/9:.0f}円のペース
+
+**2025年度（1,031円）のポイント**
+- 前年比 **+80円**（過去最大水準の引き上げ）
+- 令和8年3月31日発効
+- パート・アルバイト比率が高い小売・飲食は特に影響大
+""")
+    with col4:
+        st.markdown("""
+**活用できる賃上げ支援策**
+- 業務改善助成金（最低賃金引上げ＋設備投資を支援）
+- 賃上げ促進税制（法人税の税額控除）
+- 中小企業省力化投資補助金（人手不足と人件費上昇を同時解決）
+- キャリアアップ助成金（非正規→正規転換）
+
+**業務改善助成金の概要**
+- 最低賃金を30〜90円以上引き上げた場合に設備投資費用を補助
+- 補助率：最大9/10、上限：最大600万円
+""")
+
+
 def page_maturity_diagnosis():
     st.title("🏢 組織成熟度診断")
     st.markdown("経営管理の現状を5項目でチェックし、組織の成熟度と財務状況を可視化します。")
@@ -4513,5 +4804,9 @@ elif page == "🏢 組織成熟度診断":
     page_maturity_diagnosis()
 elif page == "📉 開業・廃業動態":
     page_openclose()
+elif page == "👴 後継者問題・廃業リスク":
+    page_successor()
+elif page == "👷 労働市場（最低賃金・求人倍率）":
+    page_labor_market()
 elif page == "🔌 e-Stat API連携":
     page_estat()

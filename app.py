@@ -260,10 +260,13 @@ def page_overview():
             st.caption(_pop_delta_note)
     with col2:
         st.metric("高齢化率", "38.8%", delta="+2.1pt（5年間）", delta_color="inverse")
+        st.caption("出典: 国勢調査（2020年）")
     with col3:
         st.metric("県内総生産", "3兆5,800億円", delta="-0.8%（前年比）", delta_color="inverse")
+        st.caption("出典: 内閣府 県民経済計算（2021年度）")
     with col4:
         st.metric("有効求人倍率", "1.35倍", delta="+0.07（前年比）")
+        st.caption("出典: 厚生労働省（2023年）")
 
     st.markdown("---")
 
@@ -343,6 +346,7 @@ def page_population():
         )
     else:
         st.info("※ 人口推計はサンプルデータです。「🔌 e-Stat API連携」でAPIキーを設定すると実データに切り替わります。")
+    st.caption("転入・転出データ（下グラフ）は住民基本台帳人口移動報告をベースにした参考推計値です。")
 
     # 実データがある場合は総人口の時系列グラフに使用（他のグラフはサンプルのまま）
     df_pop = get_sample_population()
@@ -524,6 +528,7 @@ def page_population():
 def page_industry():
     st.title("🏭 産業構造分析")
     st.markdown("---")
+    st.info("📊 このページのデータは **参考推計値（経済センサス・国勢調査ベース）** です。就業者数・前回比は統計を基にした推計であり、公式統計と異なる場合があります。")
 
     df = get_sample_industry()
 
@@ -578,11 +583,20 @@ def page_industry():
 def page_economy():
     st.title("💰 経済指標")
     st.markdown("---")
+    st.info(
+        "📊 このページのデータは **参考推計値** です。\n\n"
+        "- 一人当たり県民所得: 内閣府 県民経済計算（2020年度）\n"
+        "- 完全失業率: 総務省 労働力調査（2023年）\n"
+        "- 有効求人倍率: 厚生労働省（2023年）\n"
+        "- 製造品出荷額・農業産出額: 経産省・農水省（2022年）\n\n"
+        "最新値は各機関の公式統計を必ずご確認ください。"
+    )
 
     df = get_sample_economy()
 
     # 全国比較
     st.subheader("秋田県 vs 全国平均")
+    st.caption("出典: 内閣府 県民経済計算（2020年度）、厚生労働省（2023年）｜参考推計値")
     comparison_data = {
         "指標": ["一人当たり県民所得（万円）", "完全失業率（%）", "有効求人倍率"],
         "秋田県": [244, 2.8, 1.35],
@@ -619,6 +633,7 @@ def page_economy():
 def page_municipal():
     st.title("🏘️ 市町村比較")
     st.markdown("---")
+    st.info("📊 このページのデータは **国勢調査（2020年）をベースにした参考推計値** です。人口・高齢化率・人口増減率は最新値と異なる場合があります。最新データは秋田県統計課の公式資料をご確認ください。")
 
     df = get_sample_municipal()
 
@@ -790,11 +805,14 @@ def page_food(show_title=True):
     st.caption("秋田の強みを活かした食品産業の現状と提言")
     st.markdown("---")
 
+    st.info("📊 このページのデータは **経済センサス・工業統計をベースにした参考推計値** です。事業所数・出荷額・課題スコアは推計値であり、公式統計と異なる場合があります。出典: 経産省 工業統計（2022年）参照。")
+
     df_food = get_sample_food_manufacturing()
     df_trend = get_sample_food_trend()
     df_challenge = get_sample_food_challenge()
 
-    # KPI
+    # KPI（参考推計値）
+    st.caption("以下のKPIは参考推計値です（出典: 経産省 工業統計2022年ベース）")
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("食品製造業 事業所数", "221社", delta="-12社（5年間）", delta_color="inverse")
@@ -915,12 +933,15 @@ def page_shotengai(show_title=True):
     st.caption("秋田県内商店街の現状・課題と再生施策の提言")
     st.markdown("---")
 
+    st.info("📊 このページのデータは **商店街実態調査・独自調査をベースにした参考推計値** です。店舗数・空き店舗率・通行量は推計であり、各商店街の公式データと異なる場合があります。")
+
     df_sg = get_sample_shotengai()
     df_trend = get_sample_shotengai_trend()
     df_vacancy = get_sample_shotengai_vacancy()
     df_cases = get_sample_activation_cases()
 
-    # KPI
+    # KPI（参考推計値）
+    st.caption("以下のKPIは参考推計値です")
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("調査商店街数", "8商店街", delta="秋田県内主要")
@@ -1715,7 +1736,11 @@ def page_subsidies():
     today = date.today()
 
     # ---- フィルター ----
-    sel_shubetsu = st.multiselect("種別", ["国", "県"], default=["国", "県"])
+    col_f1, col_f2 = st.columns([2, 1])
+    with col_f1:
+        sel_shubetsu = st.multiselect("種別", ["国", "県"], default=["国", "県"])
+    with col_f2:
+        show_expired = st.checkbox("期限切れを含む", value=False)
 
     df_f = df[df["種別"].isin(sel_shubetsu)].copy()
 
@@ -1733,9 +1758,14 @@ def page_subsidies():
     df_f["状態"] = df_f["残り日数"].apply(
         lambda x: "🔴 締切間近（30日以内）" if 0 <= x <= 30
         else "🟡 申請中（31〜90日）" if 31 <= x <= 90
-        else "🟢 余裕あり" if x > 90
-        else "⚫ 通年受付"
+        else "🟢 余裕あり" if 91 <= x < 9999
+        else "⚫ 通年受付" if x == 9999
+        else "⚫ 期限切れ（次回公募待ち）"
     )
+
+    # 期限切れ（残り日数が負）はデフォルト非表示
+    if not show_expired:
+        df_f = df_f[df_f["残り日数"] >= 0]
 
     # ---- 緊急アラート ----
     urgent = df_f[df_f["残り日数"] <= 30]
@@ -1750,7 +1780,7 @@ def page_subsidies():
     df_timeline = df_f[df_f["残り日数"] < 9999].sort_values("残り日数")
     if not df_timeline.empty:
         fig = go.Figure()
-        colors = {"🔴 締切間近（30日以内）": "#d62728", "🟡 申請中（31〜90日）": "#ff7f0e", "🟢 余裕あり": "#2ca02c"}
+        colors = {"🔴 締切間近（30日以内）": "#d62728", "🟡 申請中（31〜90日）": "#ff7f0e", "🟢 余裕あり": "#2ca02c", "⚫ 期限切れ（次回公募待ち）": "#aaaaaa"}
         for _, row in df_timeline.iterrows():
             try:
                 start = datetime.strptime(row["申請開始"], "%Y-%m-%d")
@@ -2418,6 +2448,13 @@ def page_market_share():
 
     st.title("📈 地域市場シェア分析")
     st.caption("家計調査（総務省）の1世帯年間支出 × 商圏世帯数で市場規模を推計し、自社売上からシェアを算出します")
+    st.warning(
+        "⚠️ **データに関する重要な注意事項**\n\n"
+        "- **1世帯年間支出**: 総務省 家計調査（2023年 二人以上世帯）の全国平均値を使用しています。"
+        "東北・秋田の値は **参考推計値** であり、全国統計にない秋田特有品目（いぶりがっこ等）は独自推計です。\n"
+        "- **世帯数**: 国勢調査（2020年）の市町村別世帯数を使用しています。最新値は2025年国勢調査後に更新予定です。\n"
+        "- 推計市場規模はあくまで参考値です。実際の市場規模とは異なります。"
+    )
     st.markdown("---")
 
     # ── Step 1: 商圏エリア選択 ──

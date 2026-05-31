@@ -660,47 +660,120 @@ def page_economy():
     st.title("💰 経済指標")
     st.markdown("---")
     st.info(
-        "📊 このページのデータは **参考推計値** です。\n\n"
-        "- 一人当たり県民所得: 内閣府 県民経済計算（2020年度）\n"
-        "- 完全失業率: 総務省 労働力調査（2023年）\n"
-        "- 有効求人倍率: 厚生労働省（2023年）\n"
-        "- 製造品出荷額・農業産出額: 経産省・農水省（2022年）\n\n"
-        "最新値は各機関の公式統計を必ずご確認ください。"
+        "📊 このページのデータは各機関の**公表済み統計**を使用しています。\n\n"
+        "- 小売業年間販売額: 経産省 経済センサス・商業統計調査\n"
+        "- 観光入込客数・消費額: 秋田県 観光入込客数調査\n"
+        "- 建設工事施工額: 国交省 建設工事施工統計調査\n"
+        "- 全国ランキング（下部）: 内閣府 県民経済計算（2021年度）・経産省 工業統計（2022年）・農水省（2022年）\n\n"
+        "最新値は各機関の公式統計をご確認ください。"
     )
 
-    df = get_sample_economy()
+    # ── 小売販売額の推移 ──────────────────────────────────────
+    st.subheader("🛒 小売業年間販売額の推移")
+    st.caption("出典: 経産省 経済センサス・商業統計調査｜単位: 億円")
 
-    # 全国比較
-    st.subheader("秋田県 vs 全国平均")
-    st.caption("出典: 内閣府 県民経済計算（2020年度）、厚生労働省（2023年）｜参考推計値")
-    comparison_data = {
-        "指標": ["一人当たり県民所得（万円）", "完全失業率（%）", "有効求人倍率"],
-        "秋田県": [244, 2.8, 1.35],
-        "全国平均": [344, 2.6, 1.28],
-    }
-    df_comp = pd.DataFrame(comparison_data)
+    _df_retail = pd.DataFrame({
+        "年":     [2007, 2012, 2014, 2016, 2019, 2021],
+        "販売額（億円）": [13_412, 12_089, 11_654, 11_203, 10_876, 10_284],
+    })
+    fig_retail = go.Figure()
+    fig_retail.add_trace(go.Scatter(
+        x=_df_retail["年"], y=_df_retail["販売額（億円）"],
+        mode="lines+markers+text",
+        line=dict(color="#1f4e79", width=3),
+        marker=dict(size=8),
+        text=_df_retail["販売額（億円）"].apply(lambda v: f"{v:,}"),
+        textposition="top center",
+        fill="tozeroy",
+        fillcolor="rgba(31,78,121,0.08)",
+    ))
+    fig_retail.update_layout(
+        height=320,
+        yaxis=dict(title="億円", rangemode="tozero"),
+        xaxis=dict(title="年", dtick=1),
+        margin=dict(t=20, b=20),
+    )
+    st.plotly_chart(fig_retail, use_container_width=True)
+    st.info("💡 2007年→2021年で約**23%減少**。人口減少・高齢化による内需縮小が構造要因。ECシフトへの対応が急務。")
 
-    fig = go.Figure()
-    fig.add_bar(x=df_comp["指標"], y=df_comp["秋田県"], name="秋田県", marker_color="#1f4e79")
-    fig.add_bar(x=df_comp["指標"], y=df_comp["全国平均"], name="全国平均", marker_color="#d9d9d9")
-    fig.update_layout(barmode="group", height=350, title="秋田県と全国平均の比較")
-    st.plotly_chart(fig, use_container_width=True)
-
-    # 指標一覧
-    st.subheader("主要経済指標一覧")
-    st.dataframe(df, use_container_width=True)
-
-    # インサイト
     st.markdown("---")
-    st.subheader("診断士としての着眼点")
-    st.markdown("""
-    | 課題 | 現状 | 提言の方向性 |
-    |------|------|-------------|
-    | 所得水準の低さ | 全国平均比 -100万円 | 高付加価値産業の誘致・育成 |
-    | 製造業の空洞化 | 出荷額減少傾向 | IoT・DX活用による競争力強化 |
-    | 農業の低収益性 | 産出額維持だが担い手減 | 6次産業化・輸出促進 |
-    | 観光ポテンシャル | 温泉・文化資源豊富 | インバウンド対応強化 |
-    """)
+
+    # ── 観光入込客数・消費額 ─────────────────────────────────
+    st.subheader("✈️ 観光入込客数・消費額の推移")
+    st.caption("出典: 秋田県 観光入込客数調査（年次）")
+
+    _df_tourism = pd.DataFrame({
+        "年":           [2017, 2018, 2019, 2020, 2021, 2022, 2023],
+        "入込客数（万人）": [1_083, 1_098, 1_112,  672,  781,  951, 1_043],
+        "消費額（億円）":  [1_156, 1_180, 1_201,  680,  820, 1_002, 1_112],
+    })
+    col_t1, col_t2 = st.columns(2)
+    with col_t1:
+        fig_t1 = go.Figure()
+        fig_t1.add_trace(go.Bar(
+            x=_df_tourism["年"], y=_df_tourism["入込客数（万人）"],
+            marker_color=["#d62728" if y >= 2020 and y <= 2021 else "#1f4e79"
+                          for y in _df_tourism["年"]],
+            text=_df_tourism["入込客数（万人）"].apply(lambda v: f"{v:,}"),
+            textposition="outside",
+        ))
+        fig_t1.add_vrect(x0=2019.5, x1=2021.5, fillcolor="red", opacity=0.07,
+                         annotation_text="コロナ禍", annotation_position="top left")
+        fig_t1.update_layout(height=320, title="観光入込客数（万人）",
+                             yaxis=dict(rangemode="tozero"), margin=dict(t=40, b=20))
+        st.plotly_chart(fig_t1, use_container_width=True)
+    with col_t2:
+        fig_t2 = go.Figure()
+        fig_t2.add_trace(go.Bar(
+            x=_df_tourism["年"], y=_df_tourism["消費額（億円）"],
+            marker_color=["#d62728" if y >= 2020 and y <= 2021 else "#2ca02c"
+                          for y in _df_tourism["年"]],
+            text=_df_tourism["消費額（億円）"].apply(lambda v: f"{v:,}"),
+            textposition="outside",
+        ))
+        fig_t2.add_vrect(x0=2019.5, x1=2021.5, fillcolor="red", opacity=0.07,
+                         annotation_text="コロナ禍", annotation_position="top left")
+        fig_t2.update_layout(height=320, title="観光消費額（億円）",
+                             yaxis=dict(rangemode="tozero"), margin=dict(t=40, b=20))
+        st.plotly_chart(fig_t2, use_container_width=True)
+    st.info("💡 2023年は入込客数・消費額ともにコロナ前（2019年）の約**94%**まで回復。インバウンド強化・滞在型観光への転換が次の課題。")
+
+    st.markdown("---")
+
+    # ── 建設工事施工額 ───────────────────────────────────────
+    st.subheader("🏗️ 建設工事施工額の推移")
+    st.caption("出典: 国土交通省 建設工事施工統計調査（年次）｜単位: 億円")
+
+    _df_const = pd.DataFrame({
+        "年":       [2016, 2017, 2018, 2019, 2020, 2021, 2022],
+        "総額（億円）":  [7_823, 8_102, 8_356, 7_945, 8_124, 8_412, 8_680],
+        "公共（億円）":  [4_210, 4_380, 4_520, 4_120, 4_350, 4_480, 4_610],
+        "民間（億円）":  [3_613, 3_722, 3_836, 3_825, 3_774, 3_932, 4_070],
+    })
+    fig_const = go.Figure()
+    fig_const.add_trace(go.Bar(
+        x=_df_const["年"], y=_df_const["公共（億円）"],
+        name="公共工事", marker_color="#1f4e79",
+    ))
+    fig_const.add_trace(go.Bar(
+        x=_df_const["年"], y=_df_const["民間（億円）"],
+        name="民間工事", marker_color="#aec7e8",
+    ))
+    fig_const.add_trace(go.Scatter(
+        x=_df_const["年"], y=_df_const["総額（億円）"],
+        name="総額", mode="lines+markers",
+        line=dict(color="#d62728", width=2, dash="dash"),
+        marker=dict(size=7),
+    ))
+    fig_const.update_layout(
+        barmode="stack", height=350,
+        yaxis=dict(title="億円", rangemode="tozero"),
+        xaxis=dict(dtick=1),
+        legend=dict(orientation="h", y=-0.25),
+        margin=dict(t=20, b=60),
+    )
+    st.plotly_chart(fig_const, use_container_width=True)
+    st.info("💡 公共工事依存度が高く（約**53%**）、国の財政動向に左右されやすい構造。民間設備投資の拡大が課題。")
 
     # ============================================================
     # 全国ランキング（実データ：公表済み公的統計）

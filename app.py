@@ -246,10 +246,10 @@ st.sidebar.markdown("""
 for _group_name, _items in _MENU_GROUPS:
     # グループ見出し：区切り線＋やや大きめラベル
     st.sidebar.markdown(
-        f"<div style='margin-top:20px;margin-bottom:2px;"
-        f"border-top:1px solid #e0e0e0;padding-top:10px;"
-        f"color:#444;font-size:0.82em;font-weight:700;"
-        f"letter-spacing:0.03em;padding-left:4px;'>{_group_name}</div>",
+        f"<div style='margin-top:22px;margin-bottom:4px;"
+        f"border-top:2px solid #ccc;padding-top:10px;"
+        f"color:#111;font-size:1.0em;font-weight:800;"
+        f"letter-spacing:0.01em;padding-left:4px;'>{_group_name}</div>",
         unsafe_allow_html=True,
     )
     for _item in _items:

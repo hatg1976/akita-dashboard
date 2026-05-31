@@ -20,13 +20,6 @@ from collector import (
     get_sample_worker_trend,
     get_sample_economy,
     get_sample_municipal,
-    get_sample_food_manufacturing,
-    get_sample_food_trend,
-    get_sample_food_challenge,
-    get_sample_shotengai,
-    get_sample_shotengai_trend,
-    get_sample_shotengai_vacancy,
-    get_sample_activation_cases,
     get_policy_proposals,
     get_policy_kpi,
     get_policy_last_updated,
@@ -797,131 +790,14 @@ def page_industry_analysis():
 
 # ============================================================
 # ============================================================
-# 食品製造業ページ
+# 食品製造業ページ（廃止 → 業種別分析の「食料品製造業」を参照）
 # ============================================================
 def page_food(show_title=True):
     if show_title:
         st.title("🍱 食品製造業 詳細分析")
-    st.caption("秋田の強みを活かした食品産業の現状と提言")
     st.markdown("---")
 
-    st.info("📊 このページのデータは **経済センサス・工業統計をベースにした参考推計値** です。事業所数・出荷額・課題スコアは推計値であり、公式統計と異なる場合があります。出典: 経産省 工業統計（2022年）参照。")
-
-    df_food = get_sample_food_manufacturing()
-    df_trend = get_sample_food_trend()
-    df_challenge = get_sample_food_challenge()
-
-    # KPI（参考推計値）
-    st.caption("以下のKPIは参考推計値です（出典: 経産省 工業統計2022年ベース）")
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("食品製造業 事業所数", "221社", delta="-12社（5年間）", delta_color="inverse")
-    with col2:
-        st.metric("総従業員数", "約5,090人", delta="-280人（5年間）", delta_color="inverse")
-    with col3:
-        st.metric("総出荷額", "1,118億円", delta="+73億円（前年比）")
-    with col4:
-        st.metric("輸出実績あり企業", "5品目", delta="拡大余地あり")
-
-    st.markdown("---")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.subheader("品目別 製造品出荷額")
-        fig = px.bar(
-            df_food.sort_values("製造品出荷額（億円）"),
-            x="製造品出荷額（億円）", y="品目",
-            orientation="h",
-            color="前年比（%）",
-            color_continuous_scale="RdYlGn",
-            color_continuous_midpoint=0,
-            text="製造品出荷額（億円）",
-        )
-        fig.update_traces(texttemplate="%{text}億円", textposition="outside")
-        fig.update_layout(height=420)
-        st.plotly_chart(fig, use_container_width=True)
-
-    with col2:
-        st.subheader("出荷額推移（主要品目）")
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=df_trend["年"], y=df_trend["総出荷額（億円）"],
-                                  name="総計", line=dict(width=3, color="#1f4e79")))
-        fig.add_trace(go.Scatter(x=df_trend["年"], y=df_trend["清酒"],
-                                  name="清酒・日本酒", line=dict(dash="dash", color="#d62728")))
-        fig.add_trace(go.Scatter(x=df_trend["年"], y=df_trend["畜産"],
-                                  name="畜産（比内地鶏等）", line=dict(dash="dot", color="#2ca02c")))
-        fig.add_trace(go.Scatter(x=df_trend["年"], y=df_trend["農産加工"],
-                                  name="農産加工（いぶりがっこ等）", line=dict(dash="dashdot", color="#ff7f0e")))
-        fig.update_layout(height=420, yaxis_title="億円", xaxis_title="年")
-        st.plotly_chart(fig, use_container_width=True)
-
-    st.markdown("---")
-    st.subheader("企業が抱える課題")
-    col1, col2 = st.columns(2)
-
-    with col1:
-        fig = px.bar(
-            df_challenge.sort_values("深刻度（5段階）"),
-            x="深刻度（5段階）", y="課題",
-            orientation="h",
-            color="深刻度（5段階）",
-            color_continuous_scale="Reds",
-            text="深刻度（5段階）",
-            title="課題の深刻度（5段階評価）",
-        )
-        fig.update_traces(texttemplate="%{text:.1f}", textposition="outside")
-        fig.update_layout(height=320, xaxis_range=[0, 5.5])
-        st.plotly_chart(fig, use_container_width=True)
-
-    with col2:
-        fig = px.bar(
-            df_challenge.sort_values("対応している企業割合（%）"),
-            x="対応している企業割合（%）", y="課題",
-            orientation="h",
-            color="対応している企業割合（%）",
-            color_continuous_scale="Blues",
-            text="対応している企業割合（%）",
-            title="すでに対応している企業の割合（%）",
-        )
-        fig.update_traces(texttemplate="%{text}%", textposition="outside")
-        fig.update_layout(height=320)
-        st.plotly_chart(fig, use_container_width=True)
-
-    st.markdown("---")
-    st.subheader("診断士としての提言ポイント")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.success("""
-**清酒・日本酒の輸出強化**
-
-- 秋田の銘水ブランドを前面に
-- JETRO連携による海外展開支援
-- 英語ラベル・ハラール対応
-- 対象市場: 東南アジア・北米
-        """)
-    with col2:
-        st.warning("""
-**いぶりがっこ・郷土食の現代化**
-
-- 食品衛生法改正への対応支援
-- 製造の標準化・HACCP導入
-- 道の駅・EC販路の開拓
-- 観光商品としてのパッケージ化
-        """)
-    with col3:
-        st.info("""
-**6次産業化クラスターの形成**
-
-- 農家×食品加工×観光の連携
-- 共同加工施設の整備
-- 鶴岡市（山形）の成功事例を参考
-- ユネスコ創造都市認定を目指す
-        """)
-
-    st.dataframe(df_food, use_container_width=True)
-    csv = df_food.to_csv(index=False, encoding="utf-8-sig")
-    st.download_button("📥 CSVダウンロード", csv, "akita_food_manufacturing.csv", "text/csv")
+    st.info("🔧 このページは現在データ整備中です。食料品製造業の統計データは「🔎 業種別分析」→「製造業」→「食料品製造業」でご確認ください。")
 
 
 # ============================================================
@@ -933,156 +809,7 @@ def page_shotengai(show_title=True):
     st.caption("秋田県内商店街の現状・課題と再生施策の提言")
     st.markdown("---")
 
-    st.info("📊 このページのデータは **商店街実態調査・独自調査をベースにした参考推計値** です。店舗数・空き店舗率・通行量は推計であり、各商店街の公式データと異なる場合があります。")
-
-    df_sg = get_sample_shotengai()
-    df_trend = get_sample_shotengai_trend()
-    df_vacancy = get_sample_shotengai_vacancy()
-    df_cases = get_sample_activation_cases()
-
-    # KPI（参考推計値）
-    st.caption("以下のKPIは参考推計値です")
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("調査商店街数", "8商店街", delta="秋田県内主要")
-    with col2:
-        st.metric("平均空き店舗率", "38.6%", delta="+8.2pt（5年間）", delta_color="inverse")
-    with col3:
-        st.metric("平均歩行者通行量", "2,250人/日", delta="-1,800人（10年間）", delta_color="inverse")
-    with col4:
-        st.metric("年間イベント開催", "平均7.9回", delta="活性化の鍵")
-
-    st.markdown("---")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.subheader("商店街別 空き店舗率")
-        fig = px.bar(
-            df_sg.sort_values("空き店舗率（%）", ascending=True),
-            x="空き店舗率（%）", y="商店街名",
-            orientation="h",
-            color="空き店舗率（%）",
-            color_continuous_scale="Reds",
-            text="空き店舗率（%）",
-        )
-        fig.update_traces(texttemplate="%{text}%", textposition="outside")
-        fig.add_vline(x=30, line_dash="dash", line_color="orange",
-                      annotation_text="危険ライン30%", annotation_position="top")
-        fig.update_layout(height=380)
-        st.plotly_chart(fig, use_container_width=True)
-
-    with col2:
-        st.subheader("歩行者通行量の推移")
-        fig = go.Figure()
-        colors = ["#1f4e79", "#d62728", "#2ca02c"]
-        cols = ["秋田市中央通り", "横手市駅前", "大館市柄杓田"]
-        for col, color in zip(cols, colors):
-            fig.add_trace(go.Scatter(
-                x=df_trend["年"], y=df_trend[col],
-                name=col, line=dict(color=color),
-                mode="lines+markers",
-            ))
-        fig.add_vrect(x0=2019.5, x1=2021.5, fillcolor="red", opacity=0.1,
-                      annotation_text="コロナ禍", annotation_position="top left")
-        fig.update_layout(height=380, yaxis_title="人/日")
-        st.plotly_chart(fig, use_container_width=True)
-
-    st.markdown("---")
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.subheader("空き店舗の用途分類")
-        fig = px.pie(
-            df_vacancy, values="件数", names="用途",
-            title="何の跡地が多いか",
-            color_discrete_sequence=px.colors.qualitative.Pastel,
-            hole=0.4,
-        )
-        fig.update_layout(height=320)
-        st.plotly_chart(fig, use_container_width=True)
-
-    with col2:
-        st.subheader("空き店舗の平均空き期間")
-        fig = px.bar(
-            df_vacancy,
-            x="用途", y="平均空き期間（年）",
-            color="再活用の難易度",
-            color_discrete_map={"低": "#2ca02c", "中": "#ff7f0e", "高": "#d62728"},
-            text="平均空き期間（年）",
-            title="長期空き = 構造的問題のサイン",
-        )
-        fig.update_traces(texttemplate="%{text:.1f}年", textposition="outside")
-        fig.update_layout(height=320)
-        st.plotly_chart(fig, use_container_width=True)
-
-    # 他地域の成功事例
-    st.markdown("---")
-    st.subheader("他地域の成功事例（秋田への応用）")
-
-    tab1, tab2 = st.tabs(["📋 事例一覧", "🗺️ 秋田への適用ロードマップ"])
-
-    with tab1:
-        # 色付きテーブル
-        def highlight_applicability(val):
-            if val == "高":
-                return "background-color: #c6efce; color: #276221"
-            elif val == "中":
-                return "background-color: #ffeb9c; color: #9c5700"
-            return ""
-        styled = df_cases.style.map(highlight_applicability, subset=["秋田への適用可能性"])
-        st.dataframe(styled, use_container_width=True, height=250)
-
-    with tab2:
-        st.markdown("""
-        ### 秋田版 商店街再生 3ステップ
-
-        **STEP 1（0〜1年）: 実態把握・体制整備**
-        - 全商店街の空き店舗・オーナー情報データベース化
-        - 商店街組合・行政・金融機関の連絡協議会を設立
-        - チャレンジショップ制度の試験導入（秋田市1箇所から）
-
-        **STEP 2（1〜3年）: 先行モデルの構築**
-        - 秋田市中央通りをモデル地区に指定
-        - 食品製造業との連携（地産品アンテナショップ化）
-        - 空き店舗を活用したコワーキング・移住者支援拠点
-
-        **STEP 3（3〜5年）: 横展開・自走化**
-        - 成功事例を他の商店街に展開
-        - 民間エリアマネジメント組織（BID型）の設立
-        - 観光ルートへの組み込み（食・文化・商店街の一体化）
-        """)
-
-    st.markdown("---")
-    st.subheader("診断士としての提言ポイント")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.error("""
-**緊急課題: 空き店舗オーナー対策**
-
-- 高齢オーナーの「貸したくない」意識
-- 固定資産税減免インセンティブの活用
-- 相続前の事業承継・店舗活用の提案
-- 不動産仲介と商工会の連携強化
-        """)
-    with col2:
-        st.warning("""
-**中期戦略: 食品×商店街の融合**
-
-- 食品製造業のアンテナショップ誘致
-- 試食・体験型の「食文化横丁」整備
-- いぶりがっこ・比内地鶏等の直売所化
-- インバウンド向け英語対応の整備
-        """)
-    with col3:
-        st.info("""
-**長期ビジョン: 関係人口の活用**
-
-- 移住体験拠点としての商店街活用
-- 大学生・クリエイターの入居促進
-- デジタルノマド向けWi-Fi・電源整備
-- 秋田の「暮らしを体験する」観光の核に
-        """)
+    st.info("🔧 このページは現在データ整備中です。商店街に関する公的統計（空き店舗率・通行量）の収集・整備が完了次第、公開します。")
 
 
 # ============================================================
@@ -1094,8 +821,6 @@ def page_industry_detail():
     st.markdown("---")
 
     INDUSTRIES = [
-        "🍱 食品製造業",
-        "🏪 商店街",
         "🔨 職別工事業・設備工事業",
         "🏨 宿泊業",
         "🍽️ 飲食サービス業",
@@ -1110,39 +835,6 @@ def page_industry_detail():
     selected = st.selectbox("業種を選択", INDUSTRIES, label_visibility="collapsed")
     industry_key = selected.split(" ", 1)[1]  # アイコンを除いた業種名
     st.markdown("---")
-
-    if industry_key == "食品製造業":
-        page_food(show_title=False)
-        detail_for_cases = get_industry_extended_detail(industry_key)
-        cases = detail_for_cases.get("事例", [])
-        if cases:
-            st.markdown("---")
-            st.markdown("#### 📖 参考事例（他地域・中小企業白書）")
-            for case in cases:
-                with st.expander(f"**{case['タイトル']}** ― {case['地域']}"):
-                    col1, col2 = st.columns([3, 1])
-                    with col1:
-                        st.markdown(f"**取り組み:** {case['取り組み']}")
-                        st.markdown(f"**成果:** {case['成果']}")
-                    with col2:
-                        st.info(f"**秋田への示唆**\n\n{case['示唆']}")
-        return
-    if industry_key == "商店街":
-        page_shotengai(show_title=False)
-        detail_for_cases = get_industry_extended_detail(industry_key)
-        cases = detail_for_cases.get("事例", [])
-        if cases:
-            st.markdown("---")
-            st.markdown("#### 📖 参考事例（他地域・中小企業白書）")
-            for case in cases:
-                with st.expander(f"**{case['タイトル']}** ― {case['地域']}"):
-                    col1, col2 = st.columns([3, 1])
-                    with col1:
-                        st.markdown(f"**取り組み:** {case['取り組み']}")
-                        st.markdown(f"**成果:** {case['成果']}")
-                    with col2:
-                        st.info(f"**秋田への示唆**\n\n{case['示唆']}")
-        return
 
     detail = get_industry_extended_detail(industry_key)
     if not detail:

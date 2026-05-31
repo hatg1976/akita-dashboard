@@ -4574,30 +4574,6 @@ def page_labor_market():
             f"データ更新日：{wage_fetched}"
         )
 
-        st.markdown("---")
-        # ── 東北6県 比較 ──────────────────────────────────────────
-        st.subheader("🌾 東北6県 最低賃金比較（2025年度）")
-        tohoku = ["青森県","岩手県","宮城県","秋田県","山形県","福島県"]
-        df_tohoku = df_all[df_all["都道府県"].isin(tohoku)].sort_values("最低賃金（円）", ascending=False).reset_index(drop=True)
-        fig_t = go.Figure(go.Bar(
-            x=df_tohoku["都道府県"],
-            y=df_tohoku["最低賃金（円）"],
-            marker_color=df_tohoku["色"].tolist(),
-            text=[f"{v:,}円" for v in df_tohoku["最低賃金（円）"]],
-            textposition="outside",
-        ))
-        fig_t.add_hline(y=national_avg, line_dash="dash", line_color="#7f8c8d",
-                        annotation_text=f"全国加重平均 {national_avg}円")
-        fig_t.update_layout(
-            height=340, showlegend=False,
-            yaxis=dict(range=[1000, 1100], title="円"),
-            margin=dict(t=10, b=10),
-        )
-        st.plotly_chart(fig_t, use_container_width=True)
-        st.caption(
-            "東北6県はいずれも全国加重平均（1,121円）を下回っており、"
-            "地域間格差が賃金水準に直結しています。"
-        )
 
 
 def page_maturity_diagnosis():

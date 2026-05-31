@@ -209,6 +209,10 @@ if "current_page" not in st.session_state:
 # ── ボタン方式ナビゲーション ──
 st.sidebar.markdown("""
 <style>
+/* ボタン共通: 行間を詰める */
+[data-testid="stSidebar"] .stButton {
+    margin-bottom: -12px !important;
+}
 /* 非アクティブ: 透明背景・左寄せ・インデント */
 [data-testid="stSidebar"] button[kind="secondary"] {
     text-align: left !important;
@@ -216,10 +220,11 @@ st.sidebar.markdown("""
     background: transparent !important;
     border: none !important;
     color: #333 !important;
-    padding-left: 20px !important;
-    font-size: 0.92em !important;
+    padding: 3px 4px 3px 20px !important;
+    font-size: 0.90em !important;
+    line-height: 1.3 !important;
     height: auto !important;
-    min-height: 2rem !important;
+    min-height: 1.6rem !important;
 }
 [data-testid="stSidebar"] button[kind="secondary"]:hover {
     background: #f0f2f6 !important;
@@ -229,10 +234,11 @@ st.sidebar.markdown("""
 [data-testid="stSidebar"] button[kind="primary"] {
     text-align: left !important;
     justify-content: flex-start !important;
-    padding-left: 20px !important;
-    font-size: 0.92em !important;
+    padding: 3px 4px 3px 20px !important;
+    font-size: 0.90em !important;
+    line-height: 1.3 !important;
     height: auto !important;
-    min-height: 2rem !important;
+    min-height: 1.6rem !important;
 }
 </style>
 """, unsafe_allow_html=True)

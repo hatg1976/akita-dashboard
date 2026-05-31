@@ -209,27 +209,41 @@ if "current_page" not in st.session_state:
 # ── ボタン方式ナビゲーション ──
 st.sidebar.markdown("""
 <style>
+/* 非アクティブ: 透明背景・左寄せ・インデント */
 [data-testid="stSidebar"] button[kind="secondary"] {
     text-align: left !important;
     justify-content: flex-start !important;
     background: transparent !important;
     border: none !important;
-    color: inherit !important;
-    padding: 2px 4px !important;
+    color: #333 !important;
+    padding-left: 20px !important;
+    font-size: 0.92em !important;
+    height: auto !important;
+    min-height: 2rem !important;
 }
+[data-testid="stSidebar"] button[kind="secondary"]:hover {
+    background: #f0f2f6 !important;
+    color: #000 !important;
+}
+/* アクティブ: 左寄せ */
 [data-testid="stSidebar"] button[kind="primary"] {
     text-align: left !important;
     justify-content: flex-start !important;
-    padding: 2px 4px !important;
+    padding-left: 20px !important;
+    font-size: 0.92em !important;
+    height: auto !important;
+    min-height: 2rem !important;
 }
 </style>
 """, unsafe_allow_html=True)
 
 for _group_name, _items in _MENU_GROUPS:
+    # グループ見出し：区切り線＋やや大きめラベル
     st.sidebar.markdown(
-        f"<p style='color:#aaa;font-size:0.70em;font-weight:700;"
-        f"text-transform:uppercase;letter-spacing:0.06em;"
-        f"margin:14px 0 2px 4px;padding:0;'>{_group_name}</p>",
+        f"<div style='margin-top:20px;margin-bottom:2px;"
+        f"border-top:1px solid #e0e0e0;padding-top:10px;"
+        f"color:#444;font-size:0.82em;font-weight:700;"
+        f"letter-spacing:0.03em;padding-left:4px;'>{_group_name}</div>",
         unsafe_allow_html=True,
     )
     for _item in _items:

@@ -206,43 +206,42 @@ _MENU_GROUPS = [
 if "current_page" not in st.session_state:
     st.session_state.current_page = "📊 総合概要"
 
-# ── パス1: ユーザーのクリックを検出してcurrent_pageを更新 ──
-for _group_name, _items in _MENU_GROUPS:
-    _key = f"nav__{_group_name}"
-    _widget_val = st.session_state.get(_key)
-    # ウィジェット値が変化しており、かつそのグループの項目であれば切り替え
-    if (
-        _widget_val is not None
-        and _widget_val in _items
-        and _widget_val != st.session_state.current_page
-    ):
-        st.session_state.current_page = _widget_val
-        break  # 1操作ずつ処理
+# ── ボタン方式ナビゲーション ──
+st.sidebar.markdown("""
+<style>
+[data-testid="stSidebar"] button[kind="secondary"] {
+    text-align: left !important;
+    justify-content: flex-start !important;
+    background: transparent !important;
+    border: none !important;
+    color: inherit !important;
+    padding: 2px 4px !important;
+}
+[data-testid="stSidebar"] button[kind="primary"] {
+    text-align: left !important;
+    justify-content: flex-start !important;
+    padding: 2px 4px !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
-# ── パス2: サイドバーを描画（選択状態を正しく反映） ──
-_cur = st.session_state.current_page
 for _group_name, _items in _MENU_GROUPS:
-    _key = f"nav__{_group_name}"
-    # 現在ページがこのグループにあれば選択状態に、なければ未選択（None）にする
-    if _cur in _items:
-        st.session_state[_key] = _cur
-    elif _key in st.session_state:
-        del st.session_state[_key]
-
     st.sidebar.markdown(
         f"<p style='color:#aaa;font-size:0.70em;font-weight:700;"
         f"text-transform:uppercase;letter-spacing:0.06em;"
         f"margin:14px 0 2px 4px;padding:0;'>{_group_name}</p>",
         unsafe_allow_html=True,
     )
-    # index は session_state で制御するため指定しない（競合回避）
-    st.sidebar.radio(
-        label=_group_name,
-        options=_items,
-        index=None,
-        label_visibility="collapsed",
-        key=_key,
-    )
+    for _item in _items:
+        _is_active = (st.session_state.current_page == _item)
+        if st.sidebar.button(
+            _item,
+            key=f"btn__{_item}",
+            use_container_width=True,
+            type="primary" if _is_active else "secondary",
+        ):
+            st.session_state.current_page = _item
+            st.rerun()
 
 page = st.session_state.current_page
 

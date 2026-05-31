@@ -168,19 +168,74 @@ st.markdown("""
 st.sidebar.title("🌾 秋田県ダッシュボード")
 st.sidebar.markdown("---")
 
-page = st.sidebar.selectbox(
-    "表示するデータ",
-    ["📊 総合概要", "👥 人口動態", "🏭 産業構造", "📉 開業・廃業動態", "💰 経済指標",
-     "👴 後継者問題・廃業リスク", "👷 労働市場（最低賃金・求人倍率）",
-     "🔎 業種別分析", "📋 特定業種支援ガイド", "📊 業種別生産性分析",
-     "🗺️ 産業×市町村マトリックス",
-     "🔗 川上・川下フロー分析",
-     "🗾 東北4県比較", "🏘️ 市町村比較",
-     "📈 地域市場シェア分析",
-     "🏛️ 政策提言", "💴 補助金カレンダー",
-     "🏢 組織成熟度診断",
-     "🔌 e-Stat API連携"],
-)
+# ── グループ別ナビゲーション ──────────────────────────────────
+_MENU_GROUPS = [
+    ("📌 概要", [
+        "📊 総合概要",
+    ]),
+    ("👥 人口・労働", [
+        "👥 人口動態",
+        "👷 労働市場（最低賃金・求人倍率）",
+    ]),
+    ("🏭 産業・経済", [
+        "🏭 産業構造",
+        "📉 開業・廃業動態",
+        "💰 経済指標",
+        "👴 後継者問題・廃業リスク",
+    ]),
+    ("🔎 業種・地域", [
+        "🔎 業種別分析",
+        "📋 特定業種支援ガイド",
+        "📊 業種別生産性分析",
+        "🗺️ 産業×市町村マトリックス",
+        "🔗 川上・川下フロー分析",
+        "🗾 東北4県比較",
+        "🏘️ 市町村比較",
+        "📈 地域市場シェア分析",
+    ]),
+    ("🏛️ 政策・支援", [
+        "🏛️ 政策提言",
+        "💴 補助金カレンダー",
+        "🏢 組織成熟度診断",
+    ]),
+    ("⚙️ 設定", [
+        "🔌 e-Stat API連携",
+    ]),
+]
+
+if "current_page" not in st.session_state:
+    st.session_state.current_page = "📊 総合概要"
+
+for _group_name, _items in _MENU_GROUPS:
+    _key = f"nav__{_group_name}"
+    _cur = st.session_state.current_page
+
+    # このグループに現在ページがあれば選択状態に、なければキーを削除してindex=Noneを有効化
+    if _cur in _items:
+        st.session_state[_key] = _cur
+    elif _key in st.session_state:
+        del st.session_state[_key]
+
+    _idx = _items.index(_cur) if _cur in _items else None
+
+    st.sidebar.markdown(
+        f"<p style='color:#aaa;font-size:0.70em;font-weight:700;"
+        f"text-transform:uppercase;letter-spacing:0.06em;"
+        f"margin:14px 0 2px 4px;padding:0;'>{_group_name}</p>",
+        unsafe_allow_html=True,
+    )
+    _sel = st.sidebar.radio(
+        label=_group_name,
+        options=_items,
+        index=_idx,
+        label_visibility="collapsed",
+        key=_key,
+    )
+    if _sel is not None and _sel != _cur:
+        st.session_state.current_page = _sel
+        st.rerun()
+
+page = st.session_state.current_page
 
 st.sidebar.markdown("---")
 _pptx_path = "downloads/清水さん_秋田県賃上げ緊急支援事業事務局_修正済み.pptx"

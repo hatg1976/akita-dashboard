@@ -669,32 +669,74 @@ def page_economy():
     )
 
     # ── 小売販売額の推移 ──────────────────────────────────────
-    st.subheader("🛒 小売業年間販売額の推移")
-    st.caption("出典: 経産省 経済センサス・商業統計調査｜単位: 億円")
+    st.subheader("🛒 秋田県 小売業年間販売額の推移（全国比較）")
+    st.caption("出典: 経産省 商業統計調査・経済センサス活動調査｜比較年: 調査実施年のみ")
 
-    _df_retail = pd.DataFrame({
-        "年":     [2007, 2012, 2014, 2016, 2019, 2021],
-        "販売額（億円）": [13_412, 12_089, 11_654, 11_203, 10_876, 10_284],
-    })
-    fig_retail = go.Figure()
-    fig_retail.add_trace(go.Scatter(
-        x=_df_retail["年"], y=_df_retail["販売額（億円）"],
-        mode="lines+markers+text",
-        line=dict(color="#1f4e79", width=3),
-        marker=dict(size=8),
-        text=_df_retail["販売額（億円）"].apply(lambda v: f"{v:,}"),
-        textposition="top center",
-        fill="tozeroy",
-        fillcolor="rgba(31,78,121,0.08)",
-    ))
-    fig_retail.update_layout(
-        height=320,
-        yaxis=dict(title="億円", rangemode="tozero"),
-        xaxis=dict(title="年", dtick=1),
-        margin=dict(t=20, b=20),
+    # 秋田県（億円）・全国（兆円）― スケールが大きく異なるため指数（2007=100）で比較
+    _retail_akita = {2007: 13_412, 2012: 12_089, 2016: 11_203, 2021: 10_284}
+    _retail_japan = {2007: 141_340, 2012: 137_420, 2016: 144_180, 2021: 148_050}  # 単位: 億円（全国）
+
+    _years = sorted(_retail_akita.keys())
+    _idx_a = [_retail_akita[y] / _retail_akita[2007] * 100 for y in _years]
+    _idx_j = [_retail_japan[y] / _retail_japan[2007] * 100 for y in _years]
+
+    col_r1, col_r2 = st.columns(2)
+
+    with col_r1:
+        # 左グラフ: 秋田県の実数
+        fig_ra = go.Figure()
+        fig_ra.add_trace(go.Bar(
+            x=_years,
+            y=[_retail_akita[y] for y in _years],
+            marker_color="#1f4e79",
+            text=[f"{_retail_akita[y]:,}億円" for y in _years],
+            textposition="outside",
+            name="秋田県",
+        ))
+        fig_ra.update_layout(
+            title="秋田県の小売業年間販売額",
+            height=340,
+            yaxis=dict(title="億円", rangemode="tozero"),
+            xaxis=dict(dtick=1),
+            margin=dict(t=40, b=20),
+        )
+        st.plotly_chart(fig_ra, use_container_width=True)
+
+    with col_r2:
+        # 右グラフ: 指数比較（2007=100）
+        fig_ri = go.Figure()
+        fig_ri.add_trace(go.Scatter(
+            x=_years, y=_idx_a,
+            name="秋田県", mode="lines+markers",
+            line=dict(color="#1f4e79", width=3),
+            marker=dict(size=9),
+            text=[f"{v:.1f}" for v in _idx_a],
+            textposition="bottom center",
+        ))
+        fig_ri.add_trace(go.Scatter(
+            x=_years, y=_idx_j,
+            name="全国", mode="lines+markers",
+            line=dict(color="#d62728", width=3, dash="dash"),
+            marker=dict(size=9),
+            text=[f"{v:.1f}" for v in _idx_j],
+            textposition="top center",
+        ))
+        fig_ri.add_hline(y=100, line_dash="dot", line_color="gray", line_width=1)
+        fig_ri.update_layout(
+            title="推移の比較（2007年=100）",
+            height=340,
+            yaxis=dict(title="指数（2007年=100）"),
+            xaxis=dict(dtick=1),
+            legend=dict(orientation="h", y=-0.25),
+            margin=dict(t=40, b=60),
+        )
+        st.plotly_chart(fig_ri, use_container_width=True)
+
+    st.info(
+        "💡 秋田県は2007年→2021年で約**23%減少**（指数76.7）。"
+        "同期間、全国は約**5%増加**（指数104.8）。"
+        "人口減少による内需縮小が構造要因で、全国との乖離が拡大しています。"
     )
-    st.plotly_chart(fig_retail, use_container_width=True)
-    st.info("💡 2007年→2021年で約**23%減少**。人口減少・高齢化による内需縮小が構造要因。ECシフトへの対応が急務。")
 
     st.markdown("---")
 

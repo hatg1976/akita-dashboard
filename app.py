@@ -3032,7 +3032,8 @@ def page_industry_matrix():
             .map(_style_count_cell)
             .format(lambda v: v if isinstance(v, str) else f"{v:,}")
             .set_table_styles([
-                {"selector": "th", "props": [("font-size", "11px"), ("white-space", "nowrap")]},
+                {"selector": "th.col_heading", "props": [("font-size", "11px"), ("white-space", "nowrap")]},
+                {"selector": "th.row_heading", "props": [("font-size", "13px"), ("color", "black"), ("font-weight", "600"), ("white-space", "nowrap"), ("text-align", "left")]},
                 {"selector": "td", "props": [("font-size", "11px"), ("text-align", "right")]},
             ])
         )
@@ -3094,7 +3095,8 @@ def page_industry_matrix():
             .map(_style_pct_cell)
             .format(_fmt_pct)
             .set_table_styles([
-                {"selector": "th", "props": [("font-size", "11px"), ("white-space", "nowrap")]},
+                {"selector": "th.col_heading", "props": [("font-size", "11px"), ("white-space", "nowrap")]},
+                {"selector": "th.row_heading", "props": [("font-size", "13px"), ("color", "black"), ("font-weight", "600"), ("white-space", "nowrap"), ("text-align", "left")]},
                 {"selector": "td", "props": [("font-size", "11px"), ("text-align", "right")]},
             ])
         )

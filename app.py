@@ -842,12 +842,21 @@ def page_economy():
         columns=["都道府県", "県内総生産（億円）", "製造品出荷額（億円）", "一人当たり県民所得（万円）", "農業産出額（億円）"],
     )
 
+    _TOHOKU = {"青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県"}
+
     def _make_ranking_chart(df_all, col, unit, title, source):
-        """全国ランキング横棒グラフ（秋田を強調）"""
+        """全国ランキング横棒グラフ（秋田:赤 東北:オレンジ 他:青）"""
         df_s = df_all[["都道府県", col]].sort_values(col).reset_index(drop=True)
         df_s["ランク"] = df_s[col].rank(ascending=False).astype(int)
         akita_rank = int(df_s.loc[df_s["都道府県"] == "秋田県", "ランク"].values[0])
-        colors = ["#d62728" if p == "秋田県" else "#aec7e8" for p in df_s["都道府県"]]
+
+        def _color(p):
+            if p == "秋田県":   return "#d62728"   # 赤
+            if p in _TOHOKU:    return "#ff7f0e"   # オレンジ（東北他県）
+            return "#aec7e8"                        # 薄青（その他）
+
+        colors = [_color(p) for p in df_s["都道府県"]]
+
         fig = go.Figure(go.Bar(
             x=df_s[col], y=df_s["都道府県"],
             orientation="h",
@@ -858,10 +867,12 @@ def page_economy():
         ))
         fig.update_layout(
             title=f"{title}　秋田県: <b>全国{akita_rank}位</b>　（出典: {source}）",
-            height=1_200,
+            height=1_300,
             xaxis_title=unit,
-            margin=dict(l=10, r=60, t=50, b=10),
-            yaxis=dict(tickfont=dict(size=10)),
+            margin=dict(l=10, r=80, t=50, b=10),
+            yaxis=dict(
+                tickfont=dict(size=12, color="black"),
+            ),
         )
         return fig, akita_rank
 
@@ -889,7 +900,7 @@ def page_economy():
         with _tab:
             _fig, _rank = _make_ranking_chart(_df_rank, col, unit, label, src)
             st.plotly_chart(_fig, use_container_width=True)
-            st.caption(f"🔴 赤: 秋田県（全国{_rank}位）　🔵 青: その他都道府県")
+            st.caption(f"🔴 赤: 秋田県（全国{_rank}位）　🟠 オレンジ: 東北他県　🔵 青: その他都道府県")
 
 
 # ============================================================

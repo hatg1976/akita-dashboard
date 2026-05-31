@@ -206,11 +206,24 @@ _MENU_GROUPS = [
 if "current_page" not in st.session_state:
     st.session_state.current_page = "📊 総合概要"
 
+# ── パス1: ユーザーのクリックを検出してcurrent_pageを更新 ──
 for _group_name, _items in _MENU_GROUPS:
     _key = f"nav__{_group_name}"
-    _cur = st.session_state.current_page
+    _widget_val = st.session_state.get(_key)
+    # ウィジェット値が変化しており、かつそのグループの項目であれば切り替え
+    if (
+        _widget_val is not None
+        and _widget_val in _items
+        and _widget_val != st.session_state.current_page
+    ):
+        st.session_state.current_page = _widget_val
+        break  # 1操作ずつ処理
 
-    # このグループに現在ページがあれば選択状態に、なければキーを削除してindex=Noneを有効化
+# ── パス2: サイドバーを描画（選択状態を正しく反映） ──
+_cur = st.session_state.current_page
+for _group_name, _items in _MENU_GROUPS:
+    _key = f"nav__{_group_name}"
+    # 現在ページがこのグループにあれば選択状態に、なければ未選択（None）にする
     if _cur in _items:
         st.session_state[_key] = _cur
     elif _key in st.session_state:
@@ -224,16 +237,13 @@ for _group_name, _items in _MENU_GROUPS:
         f"margin:14px 0 2px 4px;padding:0;'>{_group_name}</p>",
         unsafe_allow_html=True,
     )
-    _sel = st.sidebar.radio(
+    st.sidebar.radio(
         label=_group_name,
         options=_items,
         index=_idx,
         label_visibility="collapsed",
         key=_key,
     )
-    if _sel is not None and _sel != _cur:
-        st.session_state.current_page = _sel
-        st.rerun()
 
 page = st.session_state.current_page
 

@@ -229,18 +229,17 @@ for _group_name, _items in _MENU_GROUPS:
     elif _key in st.session_state:
         del st.session_state[_key]
 
-    _idx = _items.index(_cur) if _cur in _items else None
-
     st.sidebar.markdown(
         f"<p style='color:#aaa;font-size:0.70em;font-weight:700;"
         f"text-transform:uppercase;letter-spacing:0.06em;"
         f"margin:14px 0 2px 4px;padding:0;'>{_group_name}</p>",
         unsafe_allow_html=True,
     )
+    # index は session_state で制御するため指定しない（競合回避）
     st.sidebar.radio(
         label=_group_name,
         options=_items,
-        index=_idx,
+        index=None,
         label_visibility="collapsed",
         key=_key,
     )

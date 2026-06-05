@@ -67,6 +67,17 @@ def _load_industry_matrix():
     return estat_api.fetch_industry_municipal_matrix()
 
 
+@st.cache_data(ttl=86400)
+def _load_sales_matrix():
+    """産業×市町村 売上（収入）金額マトリックスを取得（ローカルJSONキャッシュ優先）
+    値の単位は百万円。毎月1日の GitHub Actions でローカルJSONを更新済みの場合は即座に返す。
+    JSONがない場合のみ e-Stat API から直接取得する（初回・キャッシュ未生成時）。"""
+    df, source = estat_api.load_cached_sales_matrix()
+    if not df.empty:
+        return df, source
+    return estat_api.fetch_sales_municipal_matrix()
+
+
 @st.cache_data(ttl=86400)  # 1日キャッシュ（JSONキャッシュ優先、APIフォールバック）
 def _load_openclose_stats():
     """開業・廃業統計（最新2021年）を取得
@@ -2991,11 +3002,42 @@ def page_industry_census():
 # ============================================================
 def page_industry_matrix():
     st.title("🗺️ 産業×市町村マトリックス")
-    st.caption("令和3年経済センサス-活動調査に基づく産業大分類別・市町村別の事業所数")
+    st.caption("令和3年経済センサス-活動調査に基づく産業大分類別・市町村別の指標マトリックス")
+
+    # ---- 指標切替（事業所数 / 売上高）----
+    metric = st.radio(
+        "表示する指標",
+        ["事業所数", "売上（収入）金額"],
+        horizontal=True,
+        key="matrix_metric",
+    )
+
+    if metric == "売上（収入）金額":
+        unit = "百万円"          # データの単位
+        value_word = "売上高"     # 文中表現
+        count_tab_label = "📊 売上高（実数）"
+        matrix_heading = "産業大分類 × 市町村 売上（収入）金額マトリックス"
+        metric_total_label = "表示対象 総売上高"
+        heat_real_label = "売上（収入）金額（百万円）"
+        csv_name = "industry_municipal_sales_matrix.csv"
+        suppress_note = "「-」は秘匿処理または該当事業所なし　※金額の単位は百万円・民営事業所の所在地ベース　※農林漁業は除外"
+    else:
+        unit = "所"
+        value_word = "事業所数"
+        count_tab_label = "📊 事業所数（実数）"
+        matrix_heading = "産業大分類 × 市町村 事業所数マトリックス"
+        metric_total_label = "表示対象 総事業所数"
+        heat_real_label = "事業所数（所）"
+        csv_name = "industry_municipal_matrix.csv"
+        suppress_note = "「-」は秘匿処理または事業所なし　※農林漁業は農林業センサスベースのため除外"
+
     st.markdown("---")
 
     with st.spinner("データを読み込み中..."):
-        df_pivot, source_note = _load_industry_matrix()
+        if metric == "売上（収入）金額":
+            df_pivot, source_note = _load_sales_matrix()
+        else:
+            df_pivot, source_note = _load_industry_matrix()
 
     st.caption(source_note)
 
@@ -3048,14 +3090,14 @@ def page_industry_matrix():
 
     # ---- メトリクス ----
     m1, m2, m3 = st.columns(3)
-    m1.metric("表示対象 総事業所数", f"{grand_total:,} 所")
+    m1.metric(metric_total_label, f"{grand_total:,} {unit}")
     m2.metric("表示業種数", f"{len(row_sel)} 業種")
     m3.metric("表示市町村数", f"{len(col_sel)} 市町村")
 
     st.markdown("---")
-    st.markdown("#### 産業大分類 × 市町村 事業所数マトリックス")
+    st.markdown(f"#### {matrix_heading}")
 
-    tab_count, tab_pct, tab_heat = st.tabs(["📊 事業所数（実数）", "📈 構成比（%）", "🔥 ヒートマップ"])
+    tab_count, tab_pct, tab_heat = st.tabs([count_tab_label, "📈 構成比（%）", "🔥 ヒートマップ"])
 
     # ---- スタイル関数 ----
     def _style_count_row(row):
@@ -3082,7 +3124,7 @@ def page_industry_matrix():
             ])
         )
         st.dataframe(styled_count, use_container_width=True, height=min(50 + len(df_display) * 35, 700))
-        st.caption("「-」は秘匿処理または事業所なし　※農林漁業は農林業センサスベースのため除外")
+        st.caption(suppress_note)
 
     # ---- タブ②：構成比 ----
     with tab_pct:
@@ -3153,7 +3195,7 @@ def page_industry_matrix():
         with heat_col1:
             heat_norm = st.selectbox(
                 "表示方法",
-                ["事業所数（実数）", "市町村内構成比（%）", "業種内シェア（%）"],
+                [f"{value_word}（実数）", "市町村内構成比（%）", "業種内シェア（%）"],
                 key="heat_norm",
             )
         with heat_col2:
@@ -3182,7 +3224,7 @@ def page_industry_matrix():
             heat_fmt = ".1f"
         else:
             df_heat_val = df_heat_num
-            heat_label = "事業所数（所）"
+            heat_label = heat_real_label
             heat_fmt = "d"
 
         fig_heat = px.imshow(
@@ -3205,9 +3247,9 @@ def page_industry_matrix():
 
     # ---- CSVダウンロード ----
     st.download_button(
-        "📥 CSVダウンロード（実数）",
+        f"📥 CSVダウンロード（{value_word}・実数）",
         df_display.to_csv(encoding="utf-8-sig"),
-        "industry_municipal_matrix.csv",
+        csv_name,
         mime="text/csv",
     )
 
@@ -3221,7 +3263,7 @@ def page_industry_matrix():
     }
     top_cities = sorted(city_totals.items(), key=lambda x: x[1], reverse=True)[:10]
     if top_cities:
-        st.markdown("#### 市区町村別 事業所数（上位10）")
+        st.markdown(f"#### 市区町村別 {value_word}（上位10）")
         fig = go.Figure(go.Bar(
             x=[c[0] for c in top_cities],
             y=[c[1] for c in top_cities],
@@ -3232,7 +3274,7 @@ def page_industry_matrix():
         fig.update_layout(
             height=380,
             xaxis_title="市区町村",
-            yaxis_title="事業所数（所）",
+            yaxis_title=f"{value_word}（{unit}）",
             yaxis_tickformat=",",
             margin=dict(t=20, b=60),
         )

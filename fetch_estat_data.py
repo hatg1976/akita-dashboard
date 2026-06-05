@@ -24,6 +24,7 @@ load_dotenv()
 import pandas as pd
 from estat_api import fetch_formatted_population_trend, fetch_stats_data, TOHOKU_PREFS
 from estat_api import fetch_industry_municipal_matrix
+from estat_api import fetch_sales_municipal_matrix
 from estat_api import fetch_openclose_stats, OPENCLOSE_CENSUS_IDS, _fetch_estat
 
 OUTPUT_DIR = Path(__file__).parent / "data" / "estat_cache"
@@ -61,6 +62,49 @@ def fetch_matrix(today: str) -> bool:
             "data": records,
         }
         out_path = OUTPUT_DIR / "industry_matrix.json"
+        out_path.write_text(
+            json.dumps(cache, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        print(f"  ✅ 保存完了: {out_path.name}"
+              f"（{len(df_pivot)}産業 × {len(df_pivot.columns)}市区町村）")
+        return True
+    except Exception as e:
+        print(f"  ❌ エラー: {type(e).__name__}: {e}")
+        return False
+
+
+def fetch_sales_matrix(today: str) -> bool:
+    """産業×市町村 売上（収入）金額マトリックスを取得して JSON に保存する（単位: 百万円）"""
+    print("\n--- 産業×市町村 売上（収入）金額マトリックスを取得中 ---")
+    try:
+        df_pivot, source_note = fetch_sales_municipal_matrix()
+        if df_pivot.empty:
+            print("  ⚠ 売上マトリックスデータが空でした（スキップ）")
+            return False
+
+        # 値は int（百万円）、"-"（秘匿処理）、None（データなし）のいずれか
+        records: dict = {}
+        for industry in df_pivot.index:
+            records[str(industry)] = {}
+            for city in df_pivot.columns:
+                val = df_pivot.loc[industry, city]
+                if isinstance(val, str):
+                    records[str(industry)][str(city)] = val   # "-"
+                elif pd.isna(val):
+                    records[str(industry)][str(city)] = None
+                else:
+                    records[str(industry)][str(city)] = int(val)
+
+        cache = {
+            "fetched_at": today,
+            "source": source_note,
+            "unit": "百万円",
+            "columns": [str(c) for c in df_pivot.columns],
+            "index": [str(i) for i in df_pivot.index],
+            "data": records,
+        }
+        out_path = OUTPUT_DIR / "sales_matrix.json"
         out_path.write_text(
             json.dumps(cache, ensure_ascii=False, indent=2),
             encoding="utf-8",
@@ -303,6 +347,12 @@ def fetch_all():
         fetched.append("産業×市町村マトリックス")
     else:
         errors.append("産業×市町村マトリックス")
+
+    # 産業×市町村 売上（収入）金額マトリックスを取得
+    if fetch_sales_matrix(today):
+        fetched.append("産業×市町村 売上金額マトリックス")
+    else:
+        errors.append("産業×市町村 売上金額マトリックス")
 
     # 新規経済センサスIDを e-Stat で自動検索（次回調査年 = 2026年頃の予定）
     # 新IDが見つかった場合は openclose_census_ids.json に保存し次回 fetch_openclose で取得される

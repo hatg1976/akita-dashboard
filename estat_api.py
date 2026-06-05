@@ -1187,6 +1187,197 @@ def fetch_industry_municipal_matrix() -> tuple[pd.DataFrame, str]:
         return _no_data("api_error")
 
 
+# 売上（収入）金額マトリックス用 統計表ID
+# 令和3年経済センサス-活動調査 産業(大分類)×経営組織(3区分)別
+# 民営事業所数・従業者数・売上（収入）金額 ― 全国、都道府県、市区町村
+# tab: 155-2021=売上（収入）金額 / cat02: 0=総数（経営組織計）
+# 値の単位は「百万円」（事業所所在地ベース）
+SALES_MATRIX_STATS_ID = "0004006322"
+SALES_MATRIX_TAB = "155-2021"
+
+
+def load_cached_sales_matrix() -> tuple[pd.DataFrame, str]:
+    """
+    data/estat_cache/sales_matrix.json からキャッシュデータを読み込む
+
+    Returns:
+        (df_pivot, source_label) または (空DataFrame, "") ファイルがない場合
+        値の単位は百万円。"-" は秘匿処理または該当なし。
+    """
+    from pathlib import Path
+    import json
+
+    cache_path = (
+        Path(__file__).parent / "data" / "estat_cache" / "sales_matrix.json"
+    )
+    if not cache_path.exists():
+        return pd.DataFrame(), ""
+
+    try:
+        cache = json.loads(cache_path.read_text(encoding="utf-8"))
+        records = cache.get("data", {})
+        columns = cache.get("columns", [])
+        index_order = cache.get("index", list(records.keys()))
+        source = cache.get("source", "令和3年経済センサス-活動調査（2021年）売上（収入）金額")
+        fetched_at = cache.get("fetched_at", "")
+
+        df = pd.DataFrame(records).T
+        df.index.name = "産業大分類"
+        if columns:
+            df = df.reindex(columns=columns)
+        if index_order:
+            df = df.reindex(index=[i for i in index_order if i in df.index])
+
+        source_label = f"{source}（データ取得日: {fetched_at}）"
+        return df, source_label
+    except Exception:
+        return pd.DataFrame(), ""
+
+
+def fetch_sales_municipal_matrix() -> tuple[pd.DataFrame, str]:
+    """
+    令和3年経済センサス-活動調査 産業(大分類)×市区町村別 売上（収入）金額（秋田県）
+    統計表ID: 0004006322  / tab=155-2021(売上金額) / cat02=0(経営組織 総数)
+
+    Returns:
+        (df_pivot, source_note)
+          df_pivot: index=産業大分類, columns=市区町村, values=売上（収入）金額（百万円）
+                    "-" は秘匿処理または該当なしのセル
+          source_note: データ出典の説明文字列
+    値の単位は「百万円」、民営事業所の所在地ベース。
+    """
+    def _no_data(msg: str = "") -> tuple[pd.DataFrame, str]:
+        return pd.DataFrame(), msg
+
+    if not is_api_key_set():
+        return _no_data("no_key")
+
+    # 産業名の表記ゆれ（API は全角カンマ「，」、アプリは中点「・」）を吸収して
+    # CENSUS_DAIBUNSHU_LIST の表記へ正規化する
+    def _norm(s: str) -> str:
+        return s.replace("，", "・").replace("、", "・")
+
+    def _match_industry(ind_name: str) -> str:
+        ind_n = _norm(ind_name)
+        for c in CENSUS_DAIBUNSHU_LIST:
+            if _norm(c) == ind_n:
+                return c
+        for c in CENSUS_DAIBUNSHU_LIST:
+            cn = _norm(c)
+            if cn in ind_n or ind_n in cn:
+                return c
+        ind_first = ind_n.split("・")[0]
+        for c in CENSUS_DAIBUNSHU_LIST:
+            if ind_first and _norm(c).split("・")[0] == ind_first:
+                return c
+        return ind_name
+
+    # ── メタ情報を取得して産業（cat01）コードを把握 ──────────────────────
+    try:
+        _, meta = fetch_stats_data(
+            SALES_MATRIX_STATS_ID,
+            area_code=None,
+            limit=1,
+            extra_params={"cdArea": "05201", "cdTab": SALES_MATRIX_TAB, "cdCat02": "0"},
+        )
+    except Exception:
+        return _no_data("api_error")
+
+    if not meta:
+        return _no_data("api_error")
+
+    cat01_meta = meta.get("cat01", {})
+
+    # ── 市区町村を 8 件ずつバッチで取得（tab=売上金額・cat02=総数で絞り込み）──
+    muni_codes = list(_AKITA_MUNICIPALITIES.keys())
+    batches = [muni_codes[i:i + 8] for i in range(0, len(muni_codes), 8)]
+
+    all_rows: list[pd.DataFrame] = []
+    for batch in batches:
+        try:
+            extra = {
+                "cdTab": SALES_MATRIX_TAB,
+                "cdCat02": "0",
+                "cdArea": ",".join(batch),
+            }
+            df_batch, _ = fetch_stats_data(
+                SALES_MATRIX_STATS_ID,
+                area_code=None,
+                limit=50000,
+                extra_params=extra,
+            )
+            if not df_batch.empty:
+                all_rows.append(df_batch)
+        except Exception:
+            continue
+
+    if not all_rows:
+        return _no_data("api_error")
+
+    df = pd.concat(all_rows, ignore_index=True)
+
+    try:
+        akita_set = set(_AKITA_MUNICIPALITIES.keys())
+        if "area" in df.columns:
+            df = df[df["area"].isin(akita_set)]
+        if "cat02" in df.columns:
+            df = df[df["cat02"] == "0"]  # 経営組織 総数のみ
+        if df.empty:
+            return _no_data("api_error")
+
+        # 集計対象外の産業（合計系・農林漁業・細分類）を除外
+        _EXCLUDE_KEYWORDS = ("合計", "総数", "全産業", "農林漁業", "農林水産", "非農林漁業")
+        valid_cats = {
+            c: n for c, n in cat01_meta.items()
+            if c not in ("00", "000")
+            and len(c) == 1  # 大分類は1文字コード（G1/G2 等の細分類を除外）
+            and not any(s in n for s in _EXCLUDE_KEYWORDS)
+        }
+
+        rows_pivot: dict[str, dict] = {}
+        for ind_code, ind_name in valid_cats.items():
+            display = _match_industry(ind_name)
+            if "cat01" not in df.columns:
+                continue
+            df_ind = df[df["cat01"] == ind_code].copy()
+            if df_ind.empty:
+                continue
+
+            city_row: dict = {}
+            dedup = df_ind.groupby("area", as_index=False)["value"].max()
+            for _, row in dedup.iterrows():
+                city = _AKITA_MUNICIPALITIES.get(
+                    str(row.get("area", "")), str(row.get("area", ""))
+                )
+                val = row.get("value")
+                city_row[city] = "-" if (val is None or pd.isna(val)) else int(val)
+            if city_row:
+                rows_pivot[display] = city_row
+
+        if not rows_pivot:
+            return _no_data("api_error")
+
+        ordered = {ind: rows_pivot[ind] for ind in CENSUS_DAIBUNSHU_LIST if ind in rows_pivot}
+        ordered.update({k: v for k, v in rows_pivot.items() if k not in ordered})
+
+        city_order = list(_AKITA_MUNICIPALITIES.values())
+        all_cities: list[str] = []
+        for r in ordered.values():
+            for c in r:
+                if c not in all_cities:
+                    all_cities.append(c)
+        sorted_cities = sorted(
+            all_cities, key=lambda c: city_order.index(c) if c in city_order else 999
+        )
+
+        df_pivot = pd.DataFrame(ordered).T.reindex(columns=sorted_cities)
+        df_pivot.index.name = "産業大分類"
+        return df_pivot, "令和3年経済センサス-活動調査（2021年）売上（収入）金額（百万円・事業所所在地ベース）"
+
+    except Exception:
+        return _no_data("api_error")
+
+
 # 経済センサス-活動調査 開廃業データ統計表ID（{表示年: statsDataId}）
 # 各調査は前回調査との比較（存続・新設・廃業）を収録
 OPENCLOSE_CENSUS_IDS: dict[str, str] = {

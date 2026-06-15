@@ -155,8 +155,9 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Google Analytics
-st.markdown("""
+# Google Analytics（iFrame外で発火させるためcomponents.v1.htmlを使用）
+import streamlit.components.v1 as components
+components.html("""
 <!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-L4LTF7J40M"></script>
 <script>
@@ -165,7 +166,7 @@ st.markdown("""
   gtag('js', new Date());
   gtag('config', 'G-L4LTF7J40M');
 </script>
-""", unsafe_allow_html=True)
+""", height=0)
 
 # スタイル
 st.markdown("""

@@ -155,6 +155,18 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# Google Analytics
+st.markdown("""
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-L4LTF7J40M"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-L4LTF7J40M');
+</script>
+""", unsafe_allow_html=True)
+
 # スタイル
 st.markdown("""
 <style>

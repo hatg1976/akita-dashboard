@@ -672,12 +672,97 @@ def page_economy():
     st.markdown("---")
     st.info(
         "📊 このページのデータは各機関の**公表済み統計**を使用しています。\n\n"
+        "- 県内総生産（GDP）推移: 内閣府 県民経済計算（2011〜2021年度）\n"
         "- 小売業年間販売額: 経産省 経済センサス・商業統計調査\n"
         "- 観光入込客数・消費額: 秋田県 観光入込客数調査\n"
         "- 建設工事施工額: 国交省 建設工事施工統計調査\n"
         "- 全国ランキング（下部）: 内閣府 県民経済計算（2021年度）・経産省 工業統計（2022年）・農水省（2022年）\n\n"
         "最新値は各機関の公式統計をご確認ください。"
     )
+
+    # ── 県内総生産（GDP）推移 ──────────────────────────────────
+    st.subheader("🏦 秋田県 県内総生産（GDP）の推移")
+    st.caption("出典: 内閣府 県民経済計算（平成23〜令和3年度） | 名目GDP | 単位: 億円")
+
+    _GDP_YEARS = [2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021]
+    # 内閣府 県民経済計算（soukatu1.xlsx）より取得した公表値
+    _GDP_AKITA  = [33011, 32841, 33291, 33777, 34361, 34855, 36187, 35218, 35575, 34700, 35453]
+    _GDP_AOMORI = [43775, 43776, 43331, 43545, 45819, 46053, 45597, 44770, 45218, 44536, 44646]
+    _GDP_IWATE  = [41231, 43293, 45619, 46534, 46806, 47333, 48527, 48889, 48203, 47130, 47014]
+    _GDP_MIYAGI = [81618, 86723, 89479, 93609, 98658, 99188, 99904,100267, 98130, 94811, 96495]
+    _GDP_YAMAGA = [37707, 37881, 39318, 39092, 40399, 41506, 43710, 43243, 43194, 42387, 42825]
+    _GDP_FUKUSH = [66750, 69993, 73995, 76498, 78136, 79510, 80250, 79736, 78341, 77959, 78447]
+    _GDP_JAPAN  = [5237089, 5221993, 5362056, 5418882, 5627501, 5664118, 5803234, 5843507, 5783833, 5588368, 5773512]
+
+    col_g1, col_g2 = st.columns(2)
+
+    with col_g1:
+        fig_ga = go.Figure()
+        fig_ga.add_trace(go.Bar(
+            x=_GDP_YEARS,
+            y=_GDP_AKITA,
+            marker_color="#1f4e79",
+            text=[f"{v:,}" for v in _GDP_AKITA],
+            textposition="outside",
+            name="秋田県",
+        ))
+        fig_ga.update_layout(
+            title="秋田県の名目GDP（億円）",
+            height=360,
+            yaxis=dict(title="億円", range=[28000, 40000]),
+            xaxis=dict(dtick=1, title="年度"),
+            margin=dict(t=40, b=20),
+        )
+        st.plotly_chart(fig_ga, use_container_width=True)
+
+    with col_g2:
+        # 東北6県を指数化（2011年度=100）して比較
+        def _idx(vals, base):
+            return [round(v / base * 100, 1) for v in vals]
+
+        fig_gi = go.Figure()
+        _tohoku_data = [
+            ("秋田県", _GDP_AKITA,  "#1f4e79", "solid"),
+            ("青森県", _GDP_AOMORI, "#2ca02c", "dot"),
+            ("岩手県", _GDP_IWATE,  "#ff7f0e", "dot"),
+            ("宮城県", _GDP_MIYAGI, "#d62728", "dash"),
+            ("山形県", _GDP_YAMAGA, "#9467bd", "dot"),
+            ("福島県", _GDP_FUKUSH, "#8c564b", "dot"),
+        ]
+        for name, vals, color, dash in _tohoku_data:
+            width = 3 if name == "秋田県" else 2
+            fig_gi.add_trace(go.Scatter(
+                x=_GDP_YEARS,
+                y=_idx(vals, vals[0]),
+                name=name,
+                mode="lines+markers",
+                line=dict(color=color, width=width, dash=dash),
+                marker=dict(size=6 if name != "秋田県" else 9),
+            ))
+        fig_gi.add_hline(y=100, line_dash="dot", line_color="gray", line_width=1)
+        fig_gi.update_layout(
+            title="東北6県GDP比較（2011年度=100）",
+            height=360,
+            yaxis=dict(title="指数（2011年度=100）"),
+            xaxis=dict(dtick=1, title="年度"),
+            legend=dict(orientation="h", y=-0.3),
+            margin=dict(t=40, b=80),
+        )
+        st.plotly_chart(fig_gi, use_container_width=True)
+
+    # 秋田県の特徴解説
+    _gdp_change = round((_GDP_AKITA[-1] - _GDP_AKITA[0]) / _GDP_AKITA[0] * 100, 1)
+    _gdp_peak = max(_GDP_AKITA)
+    _gdp_peak_yr = _GDP_YEARS[_GDP_AKITA.index(_gdp_peak)]
+    _jp_change = round((_GDP_JAPAN[-1] - _GDP_JAPAN[0]) / _GDP_JAPAN[0] * 100, 1)
+    st.info(
+        f"💡 秋田県の名目GDPは2011→2021年度で **{_gdp_change:+.1f}%**（{_GDP_AKITA[0]:,}→{_GDP_AKITA[-1]:,}億円）。"
+        f"ピークは{_gdp_peak_yr}年度の**{_gdp_peak:,}億円**。"
+        f"同期間の全国平均は{_jp_change:+.1f}%増であり、秋田県の伸び率は全国を大きく下回っています。\n\n"
+        "東北6県では宮城県が震災復興需要で大きく伸長。秋田県は東北最小規模のGDPで推移しています。"
+    )
+
+    st.markdown("---")
 
     # ── 小売販売額の推移 ──────────────────────────────────────
     st.subheader("🛒 秋田県 小売業年間販売額の推移（全国比較）")

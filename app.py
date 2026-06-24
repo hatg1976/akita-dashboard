@@ -764,6 +764,125 @@ def page_economy():
 
     st.markdown("---")
 
+    # ── 経済活動別県内総生産 ──────────────────────────────────
+    st.subheader("🏭 経済活動別 県内総生産の推移")
+    st.caption("出典: 内閣府 県民経済計算（平成23〜令和3年度） syuyo1.xlsx | 名目GDP | 単位: 億円")
+
+    _IND_YEARS = [2011,2012,2013,2014,2015,2016,2017,2018,2019,2020,2021]
+
+    # 内閣府 県民経済計算 syuyo1.xlsx より取得（単位: 億円）
+    _IND_AKITA = {
+        '農林水産業':   [1132,1230,1112, 843, 969,1081,1122,1104,1097,1049, 896],
+        '製造業':       [5202,4742,4543,5038,5248,5167,6252,5298,5390,5524,6229],
+        '建設業':       [1783,1855,2160,2207,2151,2468,2523,2630,2892,2959,2786],
+        '電気・ガス等': [1119,1225,1444,1519,1616,1766,1734,1689,1849,1843,1600],
+        '卸売・小売業': [3460,3585,3746,3703,3642,3605,3720,3696,3641,3408,3570],
+        '不動産業':     [4530,4495,4481,4516,4543,4562,4613,4615,4661,4693,4692],
+        '公務':         [2334,2277,2158,2173,2172,2138,2201,2199,2202,2328,2300],
+        '保健衛生・社会':[3801,3944,4050,4058,4256,4295,4240,4201,4208,4118,4213],
+        'その他サービス':[5650,5488,5597,5720,5765,5773,5782,5786,5635,5778,5167],
+    }
+    _IND_AOMORI = {
+        '農林水産業':   [1793,1829,1675,1665,2128,2418,2180,2064,2059,2038,1955],
+        '製造業':       [6994,6702,6377,6638,7209,7431,7068,6338,6669,6115,6268],
+        '建設業':       [2891,3009,2741,2729,2993,3061,2868,2726,3022,3244,3027],
+        '電気・ガス等': [1096,1116,1224,1264,1338,1428,1447,1442,1515,1436,1574],
+        '卸売・小売業': [5465,5499,5692,5484,5390,5339,5544,5559,5484,6016,6317],
+        '不動産業':     [5242,5155,5115,5119,5124,5133,5157,5179,5137,5328,5289],
+        '公務':         [3142,3054,2948,3097,3232,3234,3307,3361,3320,3332,3190],
+        '保健衛生・社会':[4493,4668,4820,4835,5015,5048,5012,5018,5059,5053,5125],
+        'その他サービス':[7259,7244,7259,7714,8390,8561,9014,8083,7953,7974,7901],
+    }
+
+    _IND_COLORS = {
+        '農林水産業':    '#2d8c4e',
+        '製造業':        '#1f4e79',
+        '建設業':        '#4472c4',
+        '電気・ガス等':  '#70ad47',
+        '卸売・小売業':  '#ed7d31',
+        '不動産業':      '#ffc000',
+        '公務':          '#7030a0',
+        '保健衛生・社会':'#e91e63',
+        'その他サービス':'#9e9e9e',
+    }
+
+    col_i1, col_i2 = st.columns(2)
+
+    with col_i1:
+        fig_ia = go.Figure()
+        for ind, vals in _IND_AKITA.items():
+            fig_ia.add_trace(go.Bar(
+                name=ind, x=_IND_YEARS, y=vals,
+                marker_color=_IND_COLORS[ind],
+            ))
+        fig_ia.update_layout(
+            title="秋田県 産業別GDP（積み上げ）",
+            barmode='stack', height=420,
+            yaxis=dict(title="億円"),
+            xaxis=dict(dtick=1, title="年度"),
+            legend=dict(orientation="h", y=-0.45, font=dict(size=11)),
+            margin=dict(t=40, b=120),
+        )
+        st.plotly_chart(fig_ia, use_container_width=True)
+
+    with col_i2:
+        fig_ib = go.Figure()
+        for ind, vals in _IND_AOMORI.items():
+            fig_ib.add_trace(go.Bar(
+                name=ind, x=_IND_YEARS, y=vals,
+                marker_color=_IND_COLORS[ind],
+                showlegend=False,
+            ))
+        fig_ib.update_layout(
+            title="青森県 産業別GDP（積み上げ）",
+            barmode='stack', height=420,
+            yaxis=dict(title="億円"),
+            xaxis=dict(dtick=1, title="年度"),
+            margin=dict(t=40, b=120),
+        )
+        st.plotly_chart(fig_ib, use_container_width=True)
+
+    # 2021年度の産業構成比比較
+    st.subheader("2021年度 産業別構成比（秋田県 vs 青森県）")
+    _akita_2021  = {k: v[-1] for k, v in _IND_AKITA.items()}
+    _aomori_2021 = {k: v[-1] for k, v in _IND_AOMORI.items()}
+    _akita_total  = sum(_akita_2021.values())
+    _aomori_total = sum(_aomori_2021.values())
+
+    col_p1, col_p2 = st.columns(2)
+    with col_p1:
+        fig_pa = go.Figure(go.Pie(
+            labels=list(_akita_2021.keys()),
+            values=list(_akita_2021.values()),
+            marker_colors=[_IND_COLORS[k] for k in _akita_2021.keys()],
+            textinfo='label+percent',
+            hole=0.3,
+        ))
+        fig_pa.update_layout(title=f"秋田県（合計約{_akita_total:,}億円）", height=380, margin=dict(t=40,b=20))
+        st.plotly_chart(fig_pa, use_container_width=True)
+
+    with col_p2:
+        fig_pb = go.Figure(go.Pie(
+            labels=list(_aomori_2021.keys()),
+            values=list(_aomori_2021.values()),
+            marker_colors=[_IND_COLORS[k] for k in _aomori_2021.keys()],
+            textinfo='label+percent',
+            hole=0.3,
+        ))
+        fig_pb.update_layout(title=f"青森県（合計約{_aomori_total:,}億円）", height=380, margin=dict(t=40,b=20))
+        st.plotly_chart(fig_pb, use_container_width=True)
+
+    st.info(
+        "💡 **秋田vs青森の産業構造の違い（2021年度）**\n\n"
+        f"- **製造業**: 秋田{_akita_2021['製造業']:,}億円 vs 青森{_aomori_2021['製造業']:,}億円。"
+        "青森は製造業が2015〜2016年をピークに縮小傾向。秋田は2017・2021年度に持ち直している。\n"
+        f"- **農林水産業**: 青森{_aomori_2021['農林水産業']:,}億円 vs 秋田{_akita_2021['農林水産業']:,}億円。"
+        "青森はりんご・水産業が大きいが近年伸び悩み。\n"
+        "- **保健衛生・社会**: 両県とも高齢化で増加傾向。秋田は第3次産業の中でこの分野が相対的に大きい。"
+    )
+
+    st.markdown("---")
+
     # ── 小売販売額の推移 ──────────────────────────────────────
     st.subheader("🛒 秋田県 小売業年間販売額の推移（全国比較）")
     st.caption("出典: 経産省 商業統計調査・経済センサス活動調査｜比較年: 調査実施年のみ")

@@ -818,10 +818,10 @@ def page_economy():
         fig_ia.update_layout(
             title="秋田県 産業別GDP（積み上げ）",
             barmode='stack', height=420,
-            yaxis=dict(title="億円"),
+            yaxis=dict(title="億円", rangemode="tozero", domain=[0.32, 1.0]),
             xaxis=dict(dtick=1, title="年度"),
-            legend=dict(orientation="h", y=-0.45, font=dict(size=11)),
-            margin=dict(t=40, b=120),
+            legend=dict(orientation="h", y=0.28, font=dict(size=11)),
+            margin=dict(t=40, b=20),
         )
         st.plotly_chart(fig_ia, use_container_width=True)
 
@@ -836,38 +836,42 @@ def page_economy():
         fig_ib.update_layout(
             title="青森県 産業別GDP（積み上げ）",
             barmode='stack', height=420,
-            yaxis=dict(title="億円"),
+            yaxis=dict(title="億円", rangemode="tozero", domain=[0.32, 1.0]),
             xaxis=dict(dtick=1, title="年度"),
-            margin=dict(t=40, b=120),
+            margin=dict(t=40, b=20),
         )
         st.plotly_chart(fig_ib, use_container_width=True)
 
     # 2021年度の産業構成比比較
-    st.subheader("2021年度 産業別構成比（秋田県 vs 青森県）")
+    st.subheader("2021年度 産業別GDP構成比（秋田県 vs 青森県）")
+    st.caption("出典: 内閣府 県民経済計算（syuyo1.xlsx）")
     _akita_2021  = {k: v[-1] for k, v in _IND_AKITA.items()}
     _aomori_2021 = {k: v[-1] for k, v in _IND_AOMORI.items()}
     _akita_total  = sum(_akita_2021.values())
     _aomori_total = sum(_aomori_2021.values())
+    _ind_order = list(_IND_AKITA.keys())  # 両県共通の産業順序
 
     col_p1, col_p2 = st.columns(2)
     with col_p1:
         fig_pa = go.Figure(go.Pie(
-            labels=list(_akita_2021.keys()),
-            values=list(_akita_2021.values()),
-            marker_colors=[_IND_COLORS[k] for k in _akita_2021.keys()],
+            labels=_ind_order,
+            values=[_akita_2021[k] for k in _ind_order],
+            marker_colors=[_IND_COLORS[k] for k in _ind_order],
             textinfo='label+percent',
             hole=0.3,
+            sort=False,
         ))
         fig_pa.update_layout(title=f"秋田県（合計約{_akita_total:,}億円）", height=380, margin=dict(t=40,b=20))
         st.plotly_chart(fig_pa, use_container_width=True)
 
     with col_p2:
         fig_pb = go.Figure(go.Pie(
-            labels=list(_aomori_2021.keys()),
-            values=list(_aomori_2021.values()),
-            marker_colors=[_IND_COLORS[k] for k in _aomori_2021.keys()],
+            labels=_ind_order,
+            values=[_aomori_2021[k] for k in _ind_order],
+            marker_colors=[_IND_COLORS[k] for k in _ind_order],
             textinfo='label+percent',
             hole=0.3,
+            sort=False,
         ))
         fig_pb.update_layout(title=f"青森県（合計約{_aomori_total:,}億円）", height=380, margin=dict(t=40,b=20))
         st.plotly_chart(fig_pb, use_container_width=True)

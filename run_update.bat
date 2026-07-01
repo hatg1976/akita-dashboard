@@ -2,7 +2,10 @@
 chcp 65001 > nul
 cd /d "%~dp0"
 
-set ESTAT_API_KEY=***REMOVED_ESTAT_API_KEY***
+REM APIキーはリポジトリ管理外の .env から読み込む(直書き禁止)
+for /f "usebackq tokens=1,2 delims==" %%a in (".env") do (
+    if "%%a"=="ESTAT_API_KEY" set ESTAT_API_KEY=%%b
+)
 
 echo [%date% %time%] データ更新開始 >> logs\update_log.txt
 

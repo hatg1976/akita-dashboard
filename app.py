@@ -4714,8 +4714,11 @@ def page_labor_market():
 
     latest_wage = df_wage["秋田県（円）"].iloc[-1]
     prev_wage   = df_wage["秋田県（円）"].iloc[-2]
-    latest_ratio = df_ratio["秋田県（倍）"].iloc[-1]
-    prev_ratio   = df_ratio["秋田県（倍）"].iloc[-2]
+    latest_year = int(df_ratio["年"].iloc[-1])
+    latest_ratio_akita = df_ratio["秋田県"].iloc[-1]
+    prev_ratio_akita   = df_ratio["秋田県"].iloc[-2]
+    has_national = "全国" in df_ratio.columns
+    latest_ratio_national = df_ratio["全国"].iloc[-1] if has_national else None
 
     # ── KPI ─────────────────────────────────────────────────────
     c1, c2, c3, c4 = st.columns(4)
@@ -4730,17 +4733,17 @@ def page_labor_market():
         delta=f"10年前（2015年）比 +{prev_wage - 695}円",
     )
     c3.metric(
-        "有効求人倍率（秋田・2024年）",
-        f"{latest_ratio:.2f}倍",
-        delta=f"前年比 -{prev_ratio - latest_ratio:.2f}倍（3年連続低下）",
+        f"有効求人倍率（秋田・{latest_year}年度）",
+        f"{latest_ratio_akita:.2f}倍",
+        delta=f"前年度比 {latest_ratio_akita - prev_ratio_akita:+.2f}倍",
         delta_color="inverse",
     )
-    c4.metric(
-        "有効求人倍率（秋田・2025年）",
-        f"{df_ratio['秋田県（倍）'].iloc[-1]:.2f}倍",
-        delta="3年連続低下",
-        delta_color="inverse",
-    )
+    if has_national:
+        c4.metric(
+            f"有効求人倍率（全国・{latest_year}年度）",
+            f"{latest_ratio_national:.2f}倍",
+            delta=f"秋田との差 {latest_ratio_akita - latest_ratio_national:+.2f}倍",
+        )
 
     st.markdown("---")
 
@@ -4774,15 +4777,25 @@ def page_labor_market():
 
     # ── 有効求人倍率 ─────────────────────────────────────────────
     with col2:
-        st.subheader("有効求人倍率（秋田県・年平均）")
+        st.subheader("有効求人倍率の推移（秋田県・全国）")
         fig2 = go.Figure()
-        fig2.add_trace(go.Bar(
-            x=[f"{y}年" for y in df_ratio["年"]],
-            y=df_ratio["秋田県（倍）"],
-            marker_color=["#e67e22", "#c0392b"],
-            text=[f"{v:.2f}倍" for v in df_ratio["秋田県（倍）"]],
-            textposition="outside",
+        fig2.add_trace(go.Scatter(
+            x=df_ratio["年"],
+            y=df_ratio["秋田県"],
+            mode="lines+markers",
+            name="秋田県",
+            line=dict(color="#c0392b", width=3),
+            marker=dict(size=7),
         ))
+        if has_national:
+            fig2.add_trace(go.Scatter(
+                x=df_ratio["年"],
+                y=df_ratio["全国"],
+                mode="lines+markers",
+                name="全国",
+                line=dict(color="#2980b9", width=2, dash="dot"),
+                marker=dict(size=6),
+            ))
         fig2.add_hline(
             y=1.0,
             line_dash="dot",
@@ -4792,14 +4805,16 @@ def page_labor_market():
         )
         fig2.update_layout(
             height=380,
-            yaxis=dict(title="倍", range=[0, 1.8]),
-            margin=dict(t=10, b=10, r=120),
+            yaxis=dict(title="倍", range=[0, 2.0]),
+            xaxis=dict(title="年度", dtick=1),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            margin=dict(t=30, b=10, r=20),
         )
         st.plotly_chart(fig2, use_container_width=True)
         st.caption(
-            "出典：厚生労働省「一般職業紹介状況（公共職業安定所業務統計）」｜"
-            "2023年以降3年連続低下。ただし均衡ライン（1.0倍）は上回っており、"
-            "引き続き求人超過の状態。2015〜2023年の年次データは未取得のため非表示。"
+            "出典：総務省統計局「社会・人口統計体系」都道府県データ"
+            "（原資料：厚生労働省「一般職業紹介状況」）｜年度値。"
+            "均衡ライン（1.0倍）を上回れば求人超過。"
         )
 
     st.markdown("---")

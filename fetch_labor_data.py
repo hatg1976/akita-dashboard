@@ -332,6 +332,91 @@ def fetch_job_ratio_pref(today: str) -> bool:
     return True
 
 
+def fetch_job_ratio_trend(today: str) -> bool:
+    """総務省「社会・人口統計体系」都道府県データ（統計表ID: 0000010106）から
+    秋田県・全国の有効求人倍率（年度次、cat01=F310301）を取得して保存する。
+    原資料は厚生労働省「一般職業紹介状況」。"""
+    api_key = os.getenv("ESTAT_API_KEY", "")
+    if not api_key:
+        print("\n--- 有効求人倍率（推移）: APIキー未設定のためスキップ ---")
+        return False
+
+    print("\n--- 有効求人倍率（秋田・全国推移）を e-Stat から取得中 ---")
+    import requests
+
+    try:
+        resp = requests.get(
+            "https://api.e-stat.go.jp/rest/3.0/app/json/getStatsData",
+            params={
+                "appId": api_key,
+                "lang": "J",
+                "statsDataId": "0000010106",
+                "cdCat01": "F310301",  # 有効求人倍率
+                "cdArea": "00000,05000",  # 全国, 秋田県
+                "metaGetFlg": "N",
+                "cntGetFlg": "N",
+                "limit": 200,
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        result = resp.json().get("GET_STATS_DATA", {}).get("RESULT", {})
+        if int(result.get("STATUS", 0)) != 0:
+            print(f"  ❌ APIエラー: {result.get('ERROR_MSG')}")
+            return False
+
+        values = (resp.json().get("GET_STATS_DATA", {})
+                  .get("STATISTICAL_DATA", {})
+                  .get("DATA_INF", {}).get("VALUE", []))
+        if isinstance(values, dict):
+            values = [values]
+    except Exception as e:
+        print(f"  ❌ データ取得エラー: {e}")
+        return False
+
+    if not values:
+        print("  ⚠ データが空でした")
+        return False
+
+    by_year: dict[int, dict] = {}
+    for v in values:
+        time_code = str(v.get("@time", ""))
+        area_code = v.get("@area", "")
+        try:
+            year = int(time_code[:4])
+            ratio = float(v.get("$"))
+        except (ValueError, TypeError):
+            continue
+        by_year.setdefault(year, {})
+        if area_code == "05000":
+            by_year[year]["秋田県"] = ratio
+        elif area_code == "00000":
+            by_year[year]["全国"] = ratio
+
+    rows = [
+        {"年度": year, **vals}
+        for year, vals in sorted(by_year.items())
+        if "秋田県" in vals and "全国" in vals
+    ]
+    if not rows:
+        print("  ⚠ 秋田県・全国のペアデータが見つかりませんでした")
+        return False
+
+    cache = {
+        "fetched_at": today,
+        "table_id": "0000010106",
+        "source": "総務省統計局「社会・人口統計体系」都道府県データ（原資料: 厚生労働省「一般職業紹介状況」）／年度値",
+        "data": rows,
+    }
+    out_path = OUTPUT_DIR / "job_ratio_trend.json"
+    out_path.write_text(
+        json.dumps(cache, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    print(f"  ✅ 保存完了: {out_path.name}（{len(rows)}年度分）")
+    return True
+
+
 def main():
     today = date.today().isoformat()
     fetched, errors = [], []
@@ -345,6 +430,11 @@ def main():
         fetched.append("有効求人倍率（都道府県別）")
     else:
         errors.append("有効求人倍率（APIキー未設定またはエラー）")
+
+    if fetch_job_ratio_trend(today):
+        fetched.append("有効求人倍率（秋田・全国推移）")
+    else:
+        errors.append("有効求人倍率推移（APIキー未設定またはエラー）")
 
     manifest = {
         "last_updated": today,

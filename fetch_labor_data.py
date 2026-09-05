@@ -332,6 +332,112 @@ def fetch_job_ratio_pref(today: str) -> bool:
     return True
 
 
+def fetch_minimum_wage_trend(today: str) -> bool:
+    """総務省「社会・人口統計体系」都道府県データ（統計表ID: 0000010106）から
+    秋田県・全国の最低賃金（年度次、cat01=F6501）を取得して保存する。
+    e-Statの確定値は最新年度が1年遅れるため、直近年度は
+    minimum_wage.json（saichin.net取得）の値で補う。"""
+    api_key = os.getenv("ESTAT_API_KEY", "")
+    if not api_key:
+        print("\n--- 最低賃金（推移）: APIキー未設定のためスキップ ---")
+        return False
+
+    print("\n--- 最低賃金（秋田・全国推移）を e-Stat から取得中 ---")
+    import requests
+
+    try:
+        resp = requests.get(
+            "https://api.e-stat.go.jp/rest/3.0/app/json/getStatsData",
+            params={
+                "appId": api_key,
+                "lang": "J",
+                "statsDataId": "0000010106",
+                "cdCat01": "F6501",  # 地域別最低賃金
+                "cdArea": "00000,05000",  # 全国, 秋田県
+                "metaGetFlg": "N",
+                "cntGetFlg": "N",
+                "limit": 200,
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        result = resp.json().get("GET_STATS_DATA", {}).get("RESULT", {})
+        if int(result.get("STATUS", 0)) != 0:
+            print(f"  ❌ APIエラー: {result.get('ERROR_MSG')}")
+            return False
+
+        values = (resp.json().get("GET_STATS_DATA", {})
+                  .get("STATISTICAL_DATA", {})
+                  .get("DATA_INF", {}).get("VALUE", []))
+        if isinstance(values, dict):
+            values = [values]
+    except Exception as e:
+        print(f"  ❌ データ取得エラー: {e}")
+        return False
+
+    if not values:
+        print("  ⚠ データが空でした")
+        return False
+
+    by_year: dict[int, dict] = {}
+    for v in values:
+        time_code = str(v.get("@time", ""))
+        area_code = v.get("@area", "")
+        try:
+            year = int(time_code[:4])
+            wage = float(v.get("$"))
+        except (ValueError, TypeError):
+            continue
+        by_year.setdefault(year, {})
+        if area_code == "05000":
+            by_year[year]["秋田県"] = wage
+        elif area_code == "00000":
+            by_year[year]["全国"] = wage
+
+    # 直近年度（saichin.net取得の確定値）で補完・追記する
+    wage_cache_path = OUTPUT_DIR / "minimum_wage.json"
+    if wage_cache_path.exists():
+        try:
+            wage_cache = json.loads(wage_cache_path.read_text(encoding="utf-8"))
+            year_str = wage_cache.get("year", "")
+            latest_year = int(year_str[:4]) if year_str[:4].isdigit() else None
+            akita_latest = next(
+                (d["最低賃金（円）"] for d in wage_cache.get("data", [])
+                 if d.get("都道府県") == "秋田県"),
+                None,
+            )
+            national_avg = wage_cache.get("national_avg")
+            if latest_year and akita_latest and national_avg:
+                by_year.setdefault(latest_year, {})
+                by_year[latest_year]["秋田県"] = akita_latest
+                by_year[latest_year]["全国"] = national_avg
+        except Exception:
+            pass
+
+    rows = [
+        {"年度": year, **vals}
+        for year, vals in sorted(by_year.items())
+        if "秋田県" in vals and "全国" in vals
+    ]
+    if not rows:
+        print("  ⚠ 秋田県・全国のペアデータが見つかりませんでした")
+        return False
+
+    cache = {
+        "fetched_at": today,
+        "table_id": "0000010106",
+        "source": "総務省統計局「社会・人口統計体系」都道府県データ（原資料: 厚生労働省「地域別最低賃金額改定状況」）／年度値",
+        "data": rows,
+    }
+    out_path = OUTPUT_DIR / "minimum_wage_trend.json"
+    out_path.write_text(
+        json.dumps(cache, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    print(f"  ✅ 保存完了: {out_path.name}（{len(rows)}年度分）")
+    return True
+
+
 def fetch_job_ratio_trend(today: str) -> bool:
     """総務省「社会・人口統計体系」都道府県データ（統計表ID: 0000010106）から
     秋田県・全国の有効求人倍率（年度次、cat01=F310301）を取得して保存する。
@@ -425,6 +531,11 @@ def main():
         fetched.append("最低賃金（全47都道府県）")
     else:
         errors.append("最低賃金")
+
+    if fetch_minimum_wage_trend(today):
+        fetched.append("最低賃金（秋田・全国推移）")
+    else:
+        errors.append("最低賃金推移（APIキー未設定またはエラー）")
 
     if fetch_job_ratio_pref(today):
         fetched.append("有効求人倍率（都道府県別）")

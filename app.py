@@ -4712,8 +4712,12 @@ def page_labor_market():
     df_wage = get_minimum_wage_akita()
     df_ratio = get_job_opening_ratio_akita()
 
+    latest_wage_year = int(df_wage["年度"].iloc[-1])
+    prev_wage_year = int(df_wage["年度"].iloc[-2])
     latest_wage = df_wage["秋田県（円）"].iloc[-1]
     prev_wage   = df_wage["秋田県（円）"].iloc[-2]
+    has_national_wage = "全国（円）" in df_wage.columns
+    latest_wage_national = df_wage["全国（円）"].iloc[-1] if has_national_wage else None
     latest_year = int(df_ratio["年"].iloc[-1])
     latest_ratio_akita = df_ratio["秋田県"].iloc[-1]
     prev_ratio_akita   = df_ratio["秋田県"].iloc[-2]
@@ -4721,17 +4725,30 @@ def page_labor_market():
     latest_ratio_national = df_ratio["全国"].iloc[-1] if has_national else None
 
     # ── KPI ─────────────────────────────────────────────────────
+    ten_years_ago_year = prev_wage_year - 10
+    ten_years_ago_row = df_wage[df_wage["年度"] == ten_years_ago_year]
+    wage_10y_ago = (
+        ten_years_ago_row["秋田県（円）"].iloc[0] if not ten_years_ago_row.empty else None
+    )
+
     c1, c2, c3, c4 = st.columns(4)
     c1.metric(
-        "最低賃金（秋田・2025年度）",
-        f"{latest_wage:,}円",
-        delta=f"+{latest_wage - prev_wage}円（前年度比）",
+        f"最低賃金（秋田・{latest_wage_year}年度）",
+        f"{latest_wage:,.0f}円",
+        delta=f"+{latest_wage - prev_wage:.0f}円（前年度比）",
     )
-    c2.metric(
-        "最低賃金（秋田・2024年度）",
-        f"{prev_wage:,}円",
-        delta=f"10年前（2015年）比 +{prev_wage - 695}円",
-    )
+    if has_national_wage:
+        c2.metric(
+            f"最低賃金（全国・{latest_wage_year}年度）",
+            f"{latest_wage_national:,.0f}円",
+            delta=f"秋田との差 {latest_wage - latest_wage_national:+.0f}円",
+        )
+    elif wage_10y_ago is not None:
+        c2.metric(
+            f"最低賃金（秋田・{prev_wage_year}年度）",
+            f"{prev_wage:,.0f}円",
+            delta=f"{ten_years_ago_year}年度比 +{prev_wage - wage_10y_ago:.0f}円",
+        )
     c3.metric(
         f"有効求人倍率（秋田・{latest_year}年度）",
         f"{latest_ratio_akita:.2f}倍",
@@ -4748,28 +4765,37 @@ def page_labor_market():
     st.markdown("---")
 
     # ── 最低賃金推移 ─────────────────────────────────────────────
-    st.subheader("最低賃金の推移（秋田県）")
+    st.subheader("最低賃金の推移（秋田県・全国）")
     fig = go.Figure()
-    fig.add_trace(go.Bar(
+    fig.add_trace(go.Scatter(
         x=df_wage["年度"],
         y=df_wage["秋田県（円）"],
-        marker_color=[
-            "#c0392b" if y >= 2024 else "#2980b9"
-            for y in df_wage["年度"]
-        ],
-        text=df_wage["秋田県（円）"],
-        textposition="outside",
+        mode="lines+markers",
+        name="秋田県",
+        line=dict(color="#c0392b", width=3),
+        marker=dict(size=7),
     ))
+    if has_national_wage:
+        fig.add_trace(go.Scatter(
+            x=df_wage["年度"],
+            y=df_wage["全国（円）"],
+            mode="lines+markers",
+            name="全国（加重平均）",
+            line=dict(color="#2980b9", width=2, dash="dot"),
+            marker=dict(size=6),
+        ))
     fig.update_layout(
         height=480,
-        yaxis=dict(title="円", range=[600, 1150]),
+        yaxis=dict(title="円", range=[600, 1200]),
         xaxis=dict(title="年度", dtick=1),
-        margin=dict(t=10, b=10),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(t=30, b=10, r=20),
     )
     st.plotly_chart(fig, use_container_width=True)
     st.caption(
-        "出典：厚生労働省「地域別最低賃金額改定状況」・秋田労働局｜"
-        "2025年度（1,031円）は令和8年3月31日発効。"
+        "出典：総務省統計局「社会・人口統計体系」都道府県データ"
+        "（原資料：厚生労働省「地域別最低賃金額改定状況」）｜年度値。"
+        "2025年度（秋田1,031円）は令和8年3月31日発効。"
     )
 
     st.markdown("---")
@@ -4821,14 +4847,21 @@ def page_labor_market():
     st.subheader("📋 最低賃金 関連情報")
     col3, col4 = st.columns(2)
     with col3:
-        wage_10y = df_wage["秋田県（円）"].iloc[-2] - df_wage["秋田県（円）"].iloc[0]
+        wage_10y_start_year = prev_wage_year - 9
+        wage_10y_start_row = df_wage[df_wage["年度"] == wage_10y_start_year]
+        wage_10y_start = (
+            wage_10y_start_row["秋田県（円）"].iloc[0]
+            if not wage_10y_start_row.empty
+            else df_wage["秋田県（円）"].iloc[0]
+        )
+        wage_10y = prev_wage - wage_10y_start
         st.markdown(f"""
-**10年間の引き上げ幅（2015→2024年度）**
-- **+{wage_10y}円**（695円 → 951円、+{wage_10y/695*100:.0f}%）
+**10年間の引き上げ幅（{wage_10y_start_year}→{prev_wage_year}年度）**
+- **+{wage_10y:.0f}円**（{wage_10y_start:.0f}円 → {prev_wage:.0f}円、+{wage_10y/wage_10y_start*100:.0f}%）
 - 毎年平均 +{wage_10y/9:.0f}円のペース
 
-**2025年度（1,031円）のポイント**
-- 前年比 **+80円**（過去最大水準の引き上げ）
+**{latest_wage_year}年度（{latest_wage:,.0f}円）のポイント**
+- 前年度比 **+{latest_wage - prev_wage:.0f}円**
 - 令和8年3月31日発効
 - パート・アルバイト比率が高い小売・飲食は特に影響大
 """)

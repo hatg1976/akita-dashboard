@@ -1763,9 +1763,14 @@ def get_closure_profile() -> dict:
 # ============================================================
 
 def get_minimum_wage_akita() -> pd.DataFrame:
-    """秋田県の最低賃金推移（全年次確認済み）
-    出典: 厚生労働省「地域別最低賃金額改定状況」・秋田労働局
-    2025年度（令和7年度）は1,031円（令和8年3月31日発効）"""
+    """秋田県・全国の最低賃金推移（年度次）
+    出典: 総務省統計局「社会・人口統計体系」都道府県データ
+         （原資料: 厚生労働省「地域別最低賃金額改定状況」）
+    e-Stat実データのキャッシュ（data/labor_cache/minimum_wage_trend.json）があればそれを使用。
+    未取得時は確認済みの秋田県単独フォールバックを返す（全国列はNaN）。"""
+    df_cache, _, _ = load_cached_minimum_wage_trend()
+    if not df_cache.empty:
+        return df_cache.rename(columns={"秋田県": "秋田県（円）", "全国": "全国（円）"})
     data = {
         "年度": [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025],
         "秋田県（円）": [695, 716, 738, 762, 790, 792, 822, 853, 897, 951, 1031],
@@ -1794,6 +1799,22 @@ def get_job_opening_ratio_akita() -> pd.DataFrame:
 # ============================================================
 
 _LABOR_CACHE_DIR = Path(__file__).parent / "data" / "labor_cache"
+
+def load_cached_minimum_wage_trend() -> tuple[pd.DataFrame, str, str]:
+    """
+    最低賃金の推移（秋田県・全国、年度次）をキャッシュJSONから読み込む。
+    Returns: (df, source, fetched_at)  df columns: 年度, 秋田県, 全国
+    """
+    cache_path = _LABOR_CACHE_DIR / "minimum_wage_trend.json"
+    if cache_path.exists():
+        try:
+            cache = json.loads(cache_path.read_text(encoding="utf-8"))
+            df = pd.DataFrame(cache.get("data", []))
+            return df, cache.get("source", ""), cache.get("fetched_at", "")
+        except Exception:
+            pass
+    return pd.DataFrame(), "", ""
+
 
 def load_cached_job_ratio_trend() -> tuple[pd.DataFrame, str, str]:
     """

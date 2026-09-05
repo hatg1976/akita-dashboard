@@ -4747,75 +4747,73 @@ def page_labor_market():
 
     st.markdown("---")
 
-    col1, col2 = st.columns(2)
-
     # ── 最低賃金推移 ─────────────────────────────────────────────
-    with col1:
-        st.subheader("最低賃金の推移（秋田県）")
-        fig = go.Figure()
-        fig.add_trace(go.Bar(
-            x=df_wage["年度"],
-            y=df_wage["秋田県（円）"],
-            marker_color=[
-                "#c0392b" if y >= 2024 else "#2980b9"
-                for y in df_wage["年度"]
-            ],
-            text=df_wage["秋田県（円）"],
-            textposition="outside",
-        ))
-        fig.update_layout(
-            height=380,
-            yaxis=dict(title="円", range=[600, 1150]),
-            xaxis=dict(title="年度", dtick=1),
-            margin=dict(t=10, b=10),
-        )
-        st.plotly_chart(fig, use_container_width=True)
-        st.caption(
-            "出典：厚生労働省「地域別最低賃金額改定状況」・秋田労働局｜"
-            "2025年度（1,031円）は令和8年3月31日発効。"
-        )
+    st.subheader("最低賃金の推移（秋田県）")
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=df_wage["年度"],
+        y=df_wage["秋田県（円）"],
+        marker_color=[
+            "#c0392b" if y >= 2024 else "#2980b9"
+            for y in df_wage["年度"]
+        ],
+        text=df_wage["秋田県（円）"],
+        textposition="outside",
+    ))
+    fig.update_layout(
+        height=480,
+        yaxis=dict(title="円", range=[600, 1150]),
+        xaxis=dict(title="年度", dtick=1),
+        margin=dict(t=10, b=10),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    st.caption(
+        "出典：厚生労働省「地域別最低賃金額改定状況」・秋田労働局｜"
+        "2025年度（1,031円）は令和8年3月31日発効。"
+    )
+
+    st.markdown("---")
 
     # ── 有効求人倍率 ─────────────────────────────────────────────
-    with col2:
-        st.subheader("有効求人倍率の推移（秋田県・全国）")
-        fig2 = go.Figure()
+    st.subheader("有効求人倍率の推移（秋田県・全国）")
+    fig2 = go.Figure()
+    fig2.add_trace(go.Scatter(
+        x=df_ratio["年"],
+        y=df_ratio["秋田県"],
+        mode="lines+markers",
+        name="秋田県",
+        line=dict(color="#c0392b", width=3),
+        marker=dict(size=8),
+    ))
+    if has_national:
         fig2.add_trace(go.Scatter(
             x=df_ratio["年"],
-            y=df_ratio["秋田県"],
+            y=df_ratio["全国"],
             mode="lines+markers",
-            name="秋田県",
-            line=dict(color="#c0392b", width=3),
+            name="全国",
+            line=dict(color="#2980b9", width=2, dash="dot"),
             marker=dict(size=7),
         ))
-        if has_national:
-            fig2.add_trace(go.Scatter(
-                x=df_ratio["年"],
-                y=df_ratio["全国"],
-                mode="lines+markers",
-                name="全国",
-                line=dict(color="#2980b9", width=2, dash="dot"),
-                marker=dict(size=6),
-            ))
-        fig2.add_hline(
-            y=1.0,
-            line_dash="dot",
-            line_color="gray",
-            annotation_text="均衡ライン（1.0倍）",
-            annotation_position="right",
-        )
-        fig2.update_layout(
-            height=380,
-            yaxis=dict(title="倍", range=[0, 2.0]),
-            xaxis=dict(title="年度", dtick=1),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-            margin=dict(t=30, b=10, r=20),
-        )
-        st.plotly_chart(fig2, use_container_width=True)
-        st.caption(
-            "出典：総務省統計局「社会・人口統計体系」都道府県データ"
-            "（原資料：厚生労働省「一般職業紹介状況」）｜年度値。"
-            "均衡ライン（1.0倍）を上回れば求人超過。"
-        )
+    fig2.add_hline(
+        y=1.0,
+        line_dash="dot",
+        line_color="gray",
+        annotation_text="均衡ライン（1.0倍）",
+        annotation_position="right",
+    )
+    fig2.update_layout(
+        height=480,
+        yaxis=dict(title="倍", range=[0, 2.0]),
+        xaxis=dict(title="年度", dtick=1),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(t=30, b=10, r=20),
+    )
+    st.plotly_chart(fig2, use_container_width=True)
+    st.caption(
+        "出典：総務省統計局「社会・人口統計体系」都道府県データ"
+        "（原資料：厚生労働省「一般職業紹介状況」）｜年度値。"
+        "均衡ライン（1.0倍）を上回れば求人超過。"
+    )
 
     st.markdown("---")
 

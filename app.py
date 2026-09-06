@@ -1799,12 +1799,12 @@ def page_policy():
     col_info, col_badge = st.columns([4, 1])
     with col_info:
         st.info(f"📅 **データ最終更新: {last_updated}** — 毎月1日にGitHub Actionsが自動更新します。")
+    df_prop = get_policy_proposals()
     with col_badge:
-        st.metric("政策提言数", "4提言", "2柱構造")
+        st.metric("政策提言数", f"{len(df_prop)}提言", "2柱構造")
 
     st.markdown("---")
 
-    df_prop = get_policy_proposals()
     df_kpi  = get_policy_kpi()
     df_shin = get_shindan_actions()
     df_chuo = get_chuokai_actions()
@@ -1841,6 +1841,8 @@ def page_policy():
 
             - 省力化投資の徹底活用と効果測定
             - 高齢経営者の円滑な出口支援
+            - 生産性向上と一体化した賃上げ支援
+            - 若年層の県内定着・県内就業機会の創出
 
             **前提:** 衰退を遅らせるだけでなく、次の担い手へつなぐ。
             """)

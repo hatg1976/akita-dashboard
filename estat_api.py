@@ -519,6 +519,96 @@ def load_cached_population_forecast(area_code: str) -> tuple[pd.DataFrame, str]:
         return pd.DataFrame(), ""
 
 
+def fetch_migration_vital_trend(area_code: str = AKITA_AREA_CODE) -> tuple[pd.DataFrame, str]:
+    """
+    総務省統計局「社会・人口統計体系」都道府県データ（統計表ID: 0000010101）から
+    転入者数・転出者数・社会増減数（実数）、出生数・死亡数（自然増減の計算用）を取得する。
+    社会増減数はA5302（公式値）がある年はそれを優先し、ない年は転入-転出で補完する。
+
+    Returns:
+        (df, source_label)
+        df columns: 年, 転入者数（人）, 転出者数（人）, 社会増減（人）,
+                    出生数（人）, 死亡数（人）, 自然増減（人）
+        （出生・死亡が未取得の年は自然増減欄がNaNになる）
+    """
+    from datetime import date as _date
+
+    codes = ["A5103", "A5104", "A5302", "A4101", "A4200"]
+    df, meta = fetch_stats_data(
+        stats_data_id="0000010101",
+        area_code=area_code,
+        limit=500,
+        extra_params={"cdCat01": ",".join(codes)},
+    )
+
+    if df.empty or "cat01" not in df.columns or "time" not in df.columns or "value" not in df.columns:
+        return pd.DataFrame(), ""
+
+    df_work = df.copy()
+    df_work["年"] = pd.to_numeric(df_work["time"].str[:4], errors="coerce")
+    df_work = df_work.dropna(subset=["年"])
+    df_work["年"] = df_work["年"].astype(int)
+
+    pivot = df_work.pivot_table(index="年", columns="cat01", values="value", aggfunc="first")
+
+    rows = []
+    for year, row in pivot.iterrows():
+        in_ = row.get("A5103")
+        out_ = row.get("A5104")
+        social_official = row.get("A5302")
+        birth = row.get("A4101")
+        death = row.get("A4200")
+
+        if pd.isna(in_) or pd.isna(out_):
+            continue
+
+        social = social_official if not pd.isna(social_official) else (in_ - out_)
+        natural = (birth - death) if not (pd.isna(birth) or pd.isna(death)) else None
+
+        rows.append({
+            "年": int(year),
+            "転入者数（人）": int(in_),
+            "転出者数（人）": int(out_),
+            "社会増減（人）": int(social),
+            "出生数（人）": int(birth) if not pd.isna(birth) else None,
+            "死亡数（人）": int(death) if not pd.isna(death) else None,
+            "自然増減（人）": int(natural) if natural is not None else None,
+        })
+
+    if not rows:
+        return pd.DataFrame(), ""
+
+    df_result = pd.DataFrame(rows).sort_values("年").reset_index(drop=True)
+    # NaN のままだと JSON 標準に反する値として書き出されるため None に変換する
+    df_result = df_result.astype(object).where(pd.notna(df_result), None)
+    source = f"総務省統計局「社会・人口統計体系」都道府県データ（最終取得: {_date.today().strftime('%Y-%m-%d')}）"
+    return df_result, source
+
+
+def load_cached_migration_vital(area_code: str) -> tuple[pd.DataFrame, str, str]:
+    """
+    data/estat_cache/migration_vital_{area_code}.json からキャッシュデータを読み込む
+
+    Returns:
+        (df, source_label, fetched_at) または (空DataFrame, "", "") ファイルがない場合
+    """
+    from pathlib import Path
+    import json
+
+    cache_path = (
+        Path(__file__).parent / "data" / "estat_cache" / f"migration_vital_{area_code}.json"
+    )
+    if not cache_path.exists():
+        return pd.DataFrame(), "", ""
+
+    try:
+        cache = json.loads(cache_path.read_text(encoding="utf-8"))
+        df = pd.DataFrame(cache["data"])
+        return df, cache.get("source", ""), cache.get("fetched_at", "")
+    except Exception:
+        return pd.DataFrame(), "", ""
+
+
 def fetch_tohoku_population_latest() -> pd.DataFrame:
     """
     東北4県の直近人口・高齢化率を e-Stat から取得する

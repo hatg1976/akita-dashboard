@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import pandas as pd
-from estat_api import fetch_formatted_population_trend, fetch_population_forecast, fetch_stats_data, TOHOKU_PREFS, NATIONAL_AREA_CODE
+from estat_api import fetch_formatted_population_trend, fetch_population_forecast, fetch_migration_vital_trend, fetch_stats_data, TOHOKU_PREFS, NATIONAL_AREA_CODE, AKITA_AREA_CODE
 from estat_api import fetch_industry_municipal_matrix
 from estat_api import fetch_sales_municipal_matrix
 from estat_api import fetch_openclose_stats, OPENCLOSE_CENSUS_IDS, _fetch_estat
@@ -371,6 +371,32 @@ def fetch_all():
         except Exception as e:
             print(f"  ❌ 将来推計エラー: {type(e).__name__}: {e}")
             errors.append(f"{pref_name}_将来推計")
+
+    # 転入・転出・社会増減・自然増減（秋田県）
+    print(f"\n--- 転入・転出・自然増減（秋田県）を取得中 ---")
+    try:
+        df_mv, source_mv = fetch_migration_vital_trend(AKITA_AREA_CODE)
+        if df_mv.empty:
+            print(f"  ⚠ データが空でした（スキップ）")
+            errors.append("秋田県_転入転出自然増減")
+        else:
+            cache_mv = {
+                "fetched_at": today,
+                "area_code": AKITA_AREA_CODE,
+                "pref_name": "秋田県",
+                "source": source_mv,
+                "data": df_mv.to_dict(orient="records"),
+            }
+            out_path_mv = OUTPUT_DIR / f"migration_vital_{AKITA_AREA_CODE}.json"
+            out_path_mv.write_text(
+                json.dumps(cache_mv, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            print(f"  ✅ 保存完了: {out_path_mv.name}（{len(df_mv)}件）")
+            fetched.append("秋田県_転入転出自然増減")
+    except Exception as e:
+        print(f"  ❌ エラー: {type(e).__name__}: {e}")
+        errors.append("秋田県_転入転出自然増減")
 
     # 産業×市町村マトリックスを取得
     if fetch_matrix(today):

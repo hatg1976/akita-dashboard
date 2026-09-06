@@ -164,6 +164,38 @@ def _get_population_forecast(area_code: str) -> tuple[pd.DataFrame, str]:
     return pd.DataFrame(), ""
 
 
+@st.cache_data(ttl=86400)
+def _load_migration_vital_real(area_code: str):
+    """e-Stat から転入・転出・自然増減を取得（24時間キャッシュ）"""
+    return estat_api.fetch_migration_vital_trend(area_code)
+
+
+def _get_migration_vital(area_code: str) -> tuple[pd.DataFrame, str, str]:
+    """
+    転入・転出・社会増減・出生・死亡・自然増減を取得する（優先順位: キャッシュ → 実API → 空データ）
+    出典: 総務省統計局「社会・人口統計体系」都道府県データ
+
+    Returns:
+        (df, source_label, fetched_at)
+        df columns: 年, 転入者数（人）, 転出者数（人）, 社会増減（人）,
+                    出生数（人）, 死亡数（人）, 自然増減（人）
+    """
+    df, source, fetched_at = estat_api.load_cached_migration_vital(area_code)
+    if not df.empty:
+        return df, source, fetched_at
+
+    if estat_api.is_api_key_set():
+        try:
+            df, source = _load_migration_vital_real(area_code)
+            if not df.empty:
+                from datetime import date
+                return df, source, date.today().isoformat()
+        except Exception:
+            pass
+
+    return pd.DataFrame(), "", ""
+
+
 def _fmt_date(iso_date: str) -> str:
     """'2024-01-01' → '2024年1月1日' に変換する"""
     if not iso_date:
@@ -455,7 +487,10 @@ def page_population():
     df_pop_forecast, pop_forecast_source = _get_population_forecast(estat_api.AKITA_AREA_CODE)
     df_pop_national, national_source, national_fetched = _get_population(estat_api.NATIONAL_AREA_CODE)
     df_pop_forecast_national, _ = _get_population_forecast(estat_api.NATIONAL_AREA_CODE)
-    df_mig = get_sample_migration()
+    df_mig, mig_source, mig_fetched = _get_migration_vital(estat_api.AKITA_AREA_CODE)
+    if df_mig.empty:
+        df_mig = get_sample_migration()
+        mig_source, mig_fetched = "サンプルデータ", ""
 
     # データソース表示
     if pop_fetched:
@@ -465,7 +500,6 @@ def page_population():
         )
     else:
         st.info("※ 人口推計はサンプルデータです。「🔌 e-Stat API連携」でAPIキーを設定すると実データに切り替わります。")
-    st.caption("転入・転出データ（下グラフ）は住民基本台帳人口移動報告をベースにした参考推計値です。")
 
     # 実データがある場合は総人口の時系列グラフに使用（他のグラフはサンプルのまま）
     df_pop = get_sample_population()
@@ -566,34 +600,35 @@ def page_population():
     fig.update_layout(title="年齢3区分別人口の推移", height=400, yaxis_title="万人")
     st.plotly_chart(fig, use_container_width=True)
 
-    col1, col2 = st.columns(2)
-
-    with col1:
-        # 転入・転出
-        st.subheader("転入・転出の推移")
-        fig = go.Figure()
-        fig.add_bar(x=df_mig["年"], y=df_mig["転入者数（人）"], name="転入", marker_color="#2ca02c")
-        fig.add_bar(x=df_mig["年"], y=df_mig["転出者数（人）"], name="転出", marker_color="#d62728")
+    # 転入・転出（社会増減・自然増減の内訳）
+    st.subheader("転入・転出の推移（社会増減・自然増減の内訳）")
+    fig = go.Figure()
+    fig.add_bar(x=df_mig["年"], y=df_mig["転入者数（人）"], name="転入", marker_color="#2ca02c")
+    fig.add_bar(x=df_mig["年"], y=df_mig["転出者数（人）"], name="転出", marker_color="#d62728")
+    fig.add_trace(go.Scatter(
+        x=df_mig["年"], y=df_mig["社会増減（人）"],
+        name="社会増減（転入－転出）", mode="lines+markers",
+        line=dict(color="black", dash="dash"),
+    ))
+    if "自然増減（人）" in df_mig.columns and df_mig["自然増減（人）"].notna().any():
         fig.add_trace(go.Scatter(
-            x=df_mig["年"], y=df_mig["社会増減（人）"],
-            name="社会増減", line=dict(color="black", dash="dash"),
+            x=df_mig["年"], y=df_mig["自然増減（人）"],
+            name="自然増減（出生－死亡）", mode="lines+markers",
+            line=dict(color="#7d3c98", dash="dot"),
         ))
-        fig.update_layout(barmode="group", height=350, yaxis_title="人")
-        st.plotly_chart(fig, use_container_width=True)
-
-    with col2:
-        # 高齢化率の推移
-        st.subheader("高齢化率の推移")
-        df_pop["高齢化率（%）"] = (df_pop["老年人口（万人）"] / df_pop["総人口（万人）"] * 100).round(1)
-        fig = px.bar(
-            df_pop, x="年", y="高齢化率（%）",
-            color="高齢化率（%）",
-            color_continuous_scale="Reds",
-            text="高齢化率（%）",
+    fig.update_layout(
+        barmode="group", height=420, yaxis_title="人",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    if mig_fetched:
+        st.caption(
+            f"出典：{mig_source}｜取得: {_fmt_date(mig_fetched)}｜"
+            "社会増減＝転入者数－転出者数（公式値がある年は公式値を優先）、"
+            "自然増減＝出生数－死亡数（未取得の年は非表示）"
         )
-        fig.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
-        fig.update_layout(height=350)
-        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.caption("※ サンプルデータです（自然増減は未算出）。「🔌 e-Stat API連携」でAPIキーを設定すると実データに切り替わります。")
 
     # ── 生産年齢人口・従業者数の推移 ────────────────────────────
     st.markdown("---")

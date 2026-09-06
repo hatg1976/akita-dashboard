@@ -196,6 +196,64 @@ def _get_migration_vital(area_code: str) -> tuple[pd.DataFrame, str, str]:
     return pd.DataFrame(), "", ""
 
 
+@st.cache_data(ttl=86400)
+def _load_migration_by_age_real(area_code: str):
+    """e-Stat から年齢階級別 転入超過数を取得（24時間キャッシュ）"""
+    return estat_api.fetch_migration_by_age(area_code)
+
+
+def _get_migration_by_age(area_code: str) -> tuple[pd.DataFrame, str, int]:
+    """
+    年齢階級別の転入超過数を取得する（優先順位: キャッシュ → 実API → 空データ）
+    出典: 総務省統計局「住民基本台帳人口移動報告」
+
+    Returns:
+        (df, source_label, year)  df columns: 年齢階級, 転入超過数（人）
+    """
+    df, source, year = estat_api.load_cached_migration_by_age(area_code)
+    if not df.empty:
+        return df, source, year
+
+    if estat_api.is_api_key_set():
+        try:
+            df, source, year = _load_migration_by_age_real(area_code)
+            if not df.empty:
+                return df, source, year
+        except Exception:
+            pass
+
+    return pd.DataFrame(), "", 0
+
+
+@st.cache_data(ttl=86400)
+def _load_natural_change_by_age_real(area_code: str):
+    """e-Stat から年齢階級別 自然増減（近似）を取得（24時間キャッシュ）"""
+    return estat_api.fetch_natural_change_by_age(area_code)
+
+
+def _get_natural_change_by_age(area_code: str) -> tuple[pd.DataFrame, str, int]:
+    """
+    年齢階級別の自然増減（近似値）を取得する（優先順位: キャッシュ → 実API → 空データ）
+    出典: 厚生労働省「人口動態統計」
+
+    Returns:
+        (df, source_label, year)  df columns: 年齢階級, 自然増減（人）
+    """
+    df, source, year = estat_api.load_cached_natural_change_by_age(area_code)
+    if not df.empty:
+        return df, source, year
+
+    if estat_api.is_api_key_set():
+        try:
+            df, source, year = _load_natural_change_by_age_real(area_code)
+            if not df.empty:
+                return df, source, year
+        except Exception:
+            pass
+
+    return pd.DataFrame(), "", 0
+
+
 def _fmt_date(iso_date: str) -> str:
     """'2024-01-01' → '2024年1月1日' に変換する"""
     if not iso_date:
@@ -629,6 +687,47 @@ def page_population():
         )
     else:
         st.caption("※ サンプルデータです（自然増減は未算出）。「🔌 e-Stat API連携」でAPIキーを設定すると実データに切り替わります。")
+
+    # 年齢階級別 社会増減・自然増減の内訳
+    df_mig_age, mig_age_source, mig_age_year = _get_migration_by_age(estat_api.AKITA_AREA_CODE)
+    df_nat_age, nat_age_source, nat_age_year = _get_natural_change_by_age(estat_api.AKITA_AREA_CODE)
+
+    if not df_mig_age.empty or not df_nat_age.empty:
+        st.markdown("---")
+        st.subheader("年齢階級別の社会増減・自然増減の内訳")
+        fig = go.Figure()
+        if not df_mig_age.empty:
+            fig.add_bar(
+                x=df_mig_age["年齢階級"], y=df_mig_age["転入超過数（人）"],
+                name=f"社会増減（転入超過数・{mig_age_year}年）", marker_color="#2980b9",
+            )
+        if not df_nat_age.empty:
+            fig.add_bar(
+                x=df_nat_age["年齢階級"], y=df_nat_age["自然増減（人）"],
+                name=f"自然増減（{nat_age_year}年、近似値）", marker_color="#7d3c98",
+            )
+        fig.update_layout(
+            barmode="group", height=450, yaxis_title="人",
+            xaxis=dict(
+                title="年齢階級",
+                categoryorder="array",
+                categoryarray=estat_api.AGE_BRACKET_ORDER,
+            ),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        caption_parts = []
+        if not df_mig_age.empty:
+            caption_parts.append(f"社会増減：{mig_age_source}")
+        if not df_nat_age.empty:
+            caption_parts.append(
+                f"自然増減：{nat_age_source}"
+            )
+        st.caption("　｜　".join(caption_parts))
+        st.caption(
+            "※ 自然増減は0-4歳階級のみ出生数を加算した近似値（出生数は年齢を持たないため）。"
+            "対象年が社会増減と異なる場合があります。"
+        )
 
     # ── 生産年齢人口・従業者数の推移 ────────────────────────────
     st.markdown("---")

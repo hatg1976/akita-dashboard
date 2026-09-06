@@ -609,6 +609,219 @@ def load_cached_migration_vital(area_code: str) -> tuple[pd.DataFrame, str, str]
         return pd.DataFrame(), "", ""
 
 
+# ---------------------------------------------------------------------------
+# 年齢階級別 社会増減・自然増減
+# ---------------------------------------------------------------------------
+
+# 5歳階級の順序（85歳以上はデータ制約上85歳以上でまとめる）
+AGE_BRACKET_ORDER: list[str] = [
+    "0-4歳", "5-9歳", "10-14歳", "15-19歳", "20-24歳", "25-29歳",
+    "30-34歳", "35-39歳", "40-44歳", "45-49歳", "50-54歳", "55-59歳",
+    "60-64歳", "65-69歳", "70-74歳", "75-79歳", "80-84歳", "85歳以上",
+]
+
+# 死亡数（厚生労働省「人口動態統計」中巻、統計表ID: 0003411685、2015年〜の継続表）の
+# 年齢（5歳階級）cat02 コード → 5歳階級ラベル
+_DEATH_AGE_CODE_MAP: dict[str, str] = {
+    "00170": "0-4歳", "00180": "5-9歳", "00200": "10-14歳",
+    "00220": "15-19歳", "00230": "20-24歳", "00240": "25-29歳",
+    "00250": "30-34歳", "00260": "35-39歳", "00280": "40-44歳",
+    "00300": "45-49歳", "00320": "50-54歳", "00340": "55-59歳",
+    "00350": "60-64歳", "00360": "65-69歳", "00370": "70-74歳",
+    "00380": "75-79歳", "00400": "80-84歳",
+    "00410": "85歳以上", "00420": "85歳以上", "00430": "85歳以上", "00440": "85歳以上",
+}
+DEATH_BY_AGE_STATS_ID = "0003411685"
+
+# 出生数（厚生労働省「人口動態統計」上巻、統計表ID: 0003411597、都道府県別・年次別）
+BIRTH_STATS_ID = "0003411597"
+
+# 住民基本台帳人口移動報告（各歳、2020年〜の継続表）統計表ID
+MIGRATION_BY_AGE_STATS_ID = "0003419944"
+
+
+def _age_code_to_bracket(code: str) -> Optional[str]:
+    """0003419944 の年齢（各歳）cat01コードを5歳階級ラベルに変換する
+    例: '001'（0歳）→ '0-4歳'、'402'（90歳以上）→ '85歳以上'"""
+    if code == "402":
+        return "85歳以上"
+    if not code.isdigit():
+        return None
+    age = int(code) - 1
+    if age < 0 or age > 89:
+        return None
+    bracket_index = min(age // 5, 17)  # 85歳以上に丸め込む
+    return AGE_BRACKET_ORDER[bracket_index]
+
+
+def fetch_migration_by_age(
+    area_code: str = AKITA_AREA_CODE, year: Optional[int] = None
+) -> tuple[pd.DataFrame, str, int]:
+    """
+    総務省「住民基本台帳人口移動報告」（年齢各歳、統計表ID: 0003419944）から
+    年齢階級（5歳）別の転入超過数を取得する。
+
+    Args:
+        year: 対象年（省略時は取得可能な最新年）
+
+    Returns:
+        (df, source_label, used_year)
+        df columns: 年齢階級, 転入超過数（人）
+    """
+    from datetime import date as _date
+
+    if not year:
+        # 年齢コード×年数分の件数はlimitを超えうるため、先に最新年だけを軽く特定する
+        _df_probe, _meta_probe = fetch_stats_data(
+            stats_data_id=MIGRATION_BY_AGE_STATS_ID,
+            area_code=area_code,
+            limit=1,
+            extra_params={"cdTab": "04", "cdCat01": "000", "cdCat02": "0", "cdCat03": "60000"},
+        )
+        time_meta = _meta_probe.get("time", {})
+        if not time_meta:
+            return pd.DataFrame(), "", 0
+        year = max(int(str(t)[:4]) for t in time_meta.keys())
+
+    df, meta = fetch_stats_data(
+        stats_data_id=MIGRATION_BY_AGE_STATS_ID,
+        area_code=area_code,
+        limit=200,
+        extra_params={
+            "cdTab": "04", "cdCat02": "0", "cdCat03": "60000",
+            "cdTime": f"{year}000000",
+        },
+    )
+
+    if df.empty or "cat01" not in df.columns or "value" not in df.columns:
+        return pd.DataFrame(), "", 0
+
+    used_year = year
+    df_work = df.copy()
+    df_work["年齢階級"] = df_work["cat01"].apply(_age_code_to_bracket)
+    df_work = df_work.dropna(subset=["年齢階級"])
+
+    grouped = df_work.groupby("年齢階級", as_index=False)["value"].sum()
+    grouped = grouped.rename(columns={"value": "転入超過数（人）"})
+    grouped["_ord"] = grouped["年齢階級"].apply(
+        lambda x: AGE_BRACKET_ORDER.index(x) if x in AGE_BRACKET_ORDER else 99
+    )
+    df_result = grouped.sort_values("_ord").drop(columns=["_ord"]).reset_index(drop=True)
+    df_result["転入超過数（人）"] = df_result["転入超過数（人）"].astype(int)
+
+    source = (
+        f"総務省統計局「住民基本台帳人口移動報告」（{used_year}年、"
+        f"最終取得: {_date.today().strftime('%Y-%m-%d')}）"
+    )
+    return df_result, source, used_year
+
+
+def fetch_natural_change_by_age(
+    area_code: str = AKITA_AREA_CODE, year: Optional[int] = None
+) -> tuple[pd.DataFrame, str, int]:
+    """
+    厚生労働省「人口動態統計」から年齢階級別の死亡数（統計表ID: 0003411685、2015年〜）と
+    都道府県別出生数（統計表ID: 0003411597）を取得し、0-4歳階級に出生数を加えることで
+    年齢階級別の自然増減（近似）を算出する。
+    出生数は年齢を持たないため、便宜的に0-4歳階級にのみ計上する。
+
+    Args:
+        year: 対象年（省略時は両方のデータが取得できる最新年）
+
+    Returns:
+        (df, source_label, used_year)
+        df columns: 年齢階級, 自然増減（人）
+    """
+    from datetime import date as _date
+
+    if not year:
+        _df_probe, _meta_probe = fetch_stats_data(
+            stats_data_id=DEATH_BY_AGE_STATS_ID,
+            area_code=area_code,
+            limit=1,
+            extra_params={"cdTab": "10100", "cdCat01": "00100", "cdCat02": "00100"},
+        )
+        time_meta = _meta_probe.get("time", {})
+        if not time_meta:
+            return pd.DataFrame(), "", 0
+        year = max(int(str(t)[:4]) for t in time_meta.keys())
+
+    df_death, _ = fetch_stats_data(
+        stats_data_id=DEATH_BY_AGE_STATS_ID,
+        area_code=area_code,
+        limit=100,
+        extra_params={
+            "cdTab": "10100", "cdCat01": "00100",
+            "cdTime": f"{year}000000",
+        },
+    )
+    if df_death.empty or "cat02" not in df_death.columns or "value" not in df_death.columns:
+        return pd.DataFrame(), "", 0
+
+    df_birth, _ = fetch_stats_data(
+        stats_data_id=BIRTH_STATS_ID,
+        area_code=area_code,
+        limit=10,
+        extra_params={"cdTab": "10040", "cdTime": f"{year}000000"},
+    )
+    birth = None
+    if not df_birth.empty and "value" in df_birth.columns and not df_birth["value"].empty:
+        birth = df_birth["value"].iloc[0]
+
+    death_by_bracket: dict[str, int] = {b: 0 for b in AGE_BRACKET_ORDER}
+    for _, row in df_death.iterrows():
+        bracket = _DEATH_AGE_CODE_MAP.get(str(row["cat02"]))
+        if bracket is None or pd.isna(row["value"]):
+            continue
+        death_by_bracket[bracket] += int(row["value"])
+
+    rows = []
+    for bracket in AGE_BRACKET_ORDER:
+        natural = -death_by_bracket[bracket]
+        if bracket == "0-4歳" and birth is not None and not pd.isna(birth):
+            natural += int(birth)
+        rows.append({"年齢階級": bracket, "自然増減（人）": int(natural)})
+
+    df_result = pd.DataFrame(rows)
+    source = (
+        f"厚生労働省「人口動態統計」（{year}年、最終取得: {_date.today().strftime('%Y-%m-%d')}）｜"
+        "自然増減＝0-4歳階級のみ出生数を加算、他階級は死亡数のマイナスのみ（近似値）"
+    )
+    return df_result, source, year
+
+
+def load_cached_migration_by_age(area_code: str) -> tuple[pd.DataFrame, str, int]:
+    """data/estat_cache/migration_by_age_{area_code}.json からキャッシュデータを読み込む"""
+    from pathlib import Path
+    import json
+
+    cache_path = Path(__file__).parent / "data" / "estat_cache" / f"migration_by_age_{area_code}.json"
+    if not cache_path.exists():
+        return pd.DataFrame(), "", 0
+    try:
+        cache = json.loads(cache_path.read_text(encoding="utf-8"))
+        df = pd.DataFrame(cache["data"])
+        return df, cache.get("source", ""), cache.get("year", 0)
+    except Exception:
+        return pd.DataFrame(), "", 0
+
+
+def load_cached_natural_change_by_age(area_code: str) -> tuple[pd.DataFrame, str, int]:
+    """data/estat_cache/natural_change_by_age_{area_code}.json からキャッシュデータを読み込む"""
+    from pathlib import Path
+    import json
+
+    cache_path = Path(__file__).parent / "data" / "estat_cache" / f"natural_change_by_age_{area_code}.json"
+    if not cache_path.exists():
+        return pd.DataFrame(), "", 0
+    try:
+        cache = json.loads(cache_path.read_text(encoding="utf-8"))
+        df = pd.DataFrame(cache["data"])
+        return df, cache.get("source", ""), cache.get("year", 0)
+    except Exception:
+        return pd.DataFrame(), "", 0
+
+
 def fetch_tohoku_population_latest() -> pd.DataFrame:
     """
     東北4県の直近人口・高齢化率を e-Stat から取得する

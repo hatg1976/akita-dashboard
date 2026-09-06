@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import pandas as pd
-from estat_api import fetch_formatted_population_trend, fetch_population_forecast, fetch_migration_vital_trend, fetch_stats_data, TOHOKU_PREFS, NATIONAL_AREA_CODE, AKITA_AREA_CODE
+from estat_api import fetch_formatted_population_trend, fetch_population_forecast, fetch_migration_vital_trend, fetch_migration_by_age, fetch_natural_change_by_age, fetch_stats_data, TOHOKU_PREFS, NATIONAL_AREA_CODE, AKITA_AREA_CODE
 from estat_api import fetch_industry_municipal_matrix
 from estat_api import fetch_sales_municipal_matrix
 from estat_api import fetch_openclose_stats, OPENCLOSE_CENSUS_IDS, _fetch_estat
@@ -397,6 +397,58 @@ def fetch_all():
     except Exception as e:
         print(f"  ❌ エラー: {type(e).__name__}: {e}")
         errors.append("秋田県_転入転出自然増減")
+
+    # 年齢階級別 社会増減（転入超過数）
+    print(f"\n--- 年齢階級別 転入超過数（秋田県）を取得中 ---")
+    try:
+        df_ma, source_ma, year_ma = fetch_migration_by_age(AKITA_AREA_CODE)
+        if df_ma.empty:
+            print(f"  ⚠ データが空でした（スキップ）")
+            errors.append("秋田県_年齢階級別社会増減")
+        else:
+            cache_ma = {
+                "fetched_at": today,
+                "area_code": AKITA_AREA_CODE,
+                "year": year_ma,
+                "source": source_ma,
+                "data": df_ma.to_dict(orient="records"),
+            }
+            out_path_ma = OUTPUT_DIR / f"migration_by_age_{AKITA_AREA_CODE}.json"
+            out_path_ma.write_text(
+                json.dumps(cache_ma, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            print(f"  ✅ 保存完了: {out_path_ma.name}（{year_ma}年、{len(df_ma)}階級）")
+            fetched.append("秋田県_年齢階級別社会増減")
+    except Exception as e:
+        print(f"  ❌ エラー: {type(e).__name__}: {e}")
+        errors.append("秋田県_年齢階級別社会増減")
+
+    # 年齢階級別 自然増減（近似値）
+    print(f"\n--- 年齢階級別 自然増減（秋田県）を取得中 ---")
+    try:
+        df_na, source_na, year_na = fetch_natural_change_by_age(AKITA_AREA_CODE)
+        if df_na.empty:
+            print(f"  ⚠ データが空でした（スキップ）")
+            errors.append("秋田県_年齢階級別自然増減")
+        else:
+            cache_na = {
+                "fetched_at": today,
+                "area_code": AKITA_AREA_CODE,
+                "year": year_na,
+                "source": source_na,
+                "data": df_na.to_dict(orient="records"),
+            }
+            out_path_na = OUTPUT_DIR / f"natural_change_by_age_{AKITA_AREA_CODE}.json"
+            out_path_na.write_text(
+                json.dumps(cache_na, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            print(f"  ✅ 保存完了: {out_path_na.name}（{year_na}年度、{len(df_na)}階級）")
+            fetched.append("秋田県_年齢階級別自然増減")
+    except Exception as e:
+        print(f"  ❌ エラー: {type(e).__name__}: {e}")
+        errors.append("秋田県_年齢階級別自然増減")
 
     # 産業×市町村マトリックスを取得
     if fetch_matrix(today):

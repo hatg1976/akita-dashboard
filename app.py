@@ -254,6 +254,37 @@ def _get_natural_change_by_age(area_code: str) -> tuple[pd.DataFrame, str, int]:
     return pd.DataFrame(), "", 0
 
 
+@st.cache_data(ttl=86400)
+def _load_labor_share_real():
+    """e-Stat から都道府県別労働分配率を取得（24時間キャッシュ）"""
+    return estat_api.fetch_labor_share_by_prefecture()
+
+
+def _get_labor_share() -> tuple[pd.DataFrame, str, str]:
+    """
+    都道府県別の労働分配率を取得する（優先順位: キャッシュ → 実API → 空データ）
+    出典: 令和3年経済センサス-活動調査
+
+    Returns:
+        (df, source_label, fetched_at)
+        df columns: 都道府県, 労働分配率（%）, 給与総額（百万円）, 粗付加価値額（百万円）
+    """
+    df, source, fetched_at = estat_api.load_cached_labor_share()
+    if not df.empty:
+        return df, source, fetched_at
+
+    if estat_api.is_api_key_set():
+        try:
+            df, source = _load_labor_share_real()
+            if not df.empty:
+                from datetime import date
+                return df, source, date.today().isoformat()
+        except Exception:
+            pass
+
+    return pd.DataFrame(), "", ""
+
+
 def _fmt_date(iso_date: str) -> str:
     """'2024-01-01' → '2024年1月1日' に変換する"""
     if not iso_date:
@@ -991,6 +1022,52 @@ def page_economy():
     )
 
     st.markdown("---")
+
+    # ── 労働分配率（都道府県別） ────────────────────────────────
+    df_labor_share, labor_share_source, labor_share_fetched = _get_labor_share()
+
+    if not df_labor_share.empty:
+        st.subheader("👷 労働分配率（都道府県別）")
+
+        df_ls_sorted = df_labor_share[df_labor_share["都道府県"] != "全国"].sort_values(
+            "労働分配率（%）", ascending=False
+        ).reset_index(drop=True)
+        national_row = df_labor_share[df_labor_share["都道府県"] == "全国"]
+        national_value = national_row["労働分配率（%）"].iloc[0] if not national_row.empty else None
+        akita_row = df_ls_sorted[df_ls_sorted["都道府県"] == "秋田県"]
+        akita_rank = akita_row.index[0] + 1 if not akita_row.empty else None
+
+        fig_ls = go.Figure()
+        fig_ls.add_trace(go.Bar(
+            x=df_ls_sorted["都道府県"],
+            y=df_ls_sorted["労働分配率（%）"],
+            marker_color=[
+                "#c0392b" if p == "秋田県" else "#2980b9" for p in df_ls_sorted["都道府県"]
+            ],
+        ))
+        if national_value is not None:
+            fig_ls.add_hline(
+                y=national_value, line_dash="dot", line_color="gray",
+                annotation_text=f"全国平均（{national_value:.1f}%）",
+                annotation_position="top left",
+            )
+        fig_ls.update_layout(
+            height=420,
+            yaxis=dict(title="労働分配率（%）"),
+            xaxis=dict(title="都道府県", tickangle=-90),
+            margin=dict(t=20, b=10),
+        )
+        st.plotly_chart(fig_ls, use_container_width=True)
+        st.caption(f"出典：{labor_share_source}｜取得: {_fmt_date(labor_share_fetched)}")
+        if akita_rank is not None and national_value is not None:
+            akita_value = akita_row["労働分配率（%）"].iloc[0]
+            st.info(
+                f"💡 秋田県の労働分配率は**{akita_value:.1f}%**で、47都道府県中**{akita_rank}位**の高さ。"
+                f"全国平均（{national_value:.1f}%）を{akita_value - national_value:+.1f}ポイント上回っています。"
+                "付加価値額に占める人件費比率が高く、労働集約的な産業構造・低い一人当たり生産性を反映していると考えられます。"
+            )
+
+        st.markdown("---")
 
     # ── 経済活動別県内総生産 ──────────────────────────────────
     st.subheader("🏭 経済活動別 県内総生産の推移")

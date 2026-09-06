@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import pandas as pd
-from estat_api import fetch_formatted_population_trend, fetch_population_forecast, fetch_migration_vital_trend, fetch_migration_by_age, fetch_natural_change_by_age, fetch_stats_data, TOHOKU_PREFS, NATIONAL_AREA_CODE, AKITA_AREA_CODE
+from estat_api import fetch_formatted_population_trend, fetch_population_forecast, fetch_migration_vital_trend, fetch_migration_by_age, fetch_natural_change_by_age, fetch_labor_share_by_prefecture, fetch_stats_data, TOHOKU_PREFS, NATIONAL_AREA_CODE, AKITA_AREA_CODE
 from estat_api import fetch_industry_municipal_matrix
 from estat_api import fetch_sales_municipal_matrix
 from estat_api import fetch_openclose_stats, OPENCLOSE_CENSUS_IDS, _fetch_estat
@@ -449,6 +449,30 @@ def fetch_all():
     except Exception as e:
         print(f"  ❌ エラー: {type(e).__name__}: {e}")
         errors.append("秋田県_年齢階級別自然増減")
+
+    # 労働分配率（都道府県別）
+    print(f"\n--- 労働分配率（都道府県別）を取得中 ---")
+    try:
+        df_ls, source_ls = fetch_labor_share_by_prefecture()
+        if df_ls.empty:
+            print(f"  ⚠ データが空でした（スキップ）")
+            errors.append("労働分配率_都道府県別")
+        else:
+            cache_ls = {
+                "fetched_at": today,
+                "source": source_ls,
+                "data": df_ls.to_dict(orient="records"),
+            }
+            out_path_ls = OUTPUT_DIR / "labor_share_prefecture.json"
+            out_path_ls.write_text(
+                json.dumps(cache_ls, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            print(f"  ✅ 保存完了: {out_path_ls.name}（{len(df_ls)}都道府県）")
+            fetched.append("労働分配率_都道府県別")
+    except Exception as e:
+        print(f"  ❌ エラー: {type(e).__name__}: {e}")
+        errors.append("労働分配率_都道府県別")
 
     # 産業×市町村マトリックスを取得
     if fetch_matrix(today):

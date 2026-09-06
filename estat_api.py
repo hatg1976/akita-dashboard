@@ -822,6 +822,98 @@ def load_cached_natural_change_by_age(area_code: str) -> tuple[pd.DataFrame, str
         return pd.DataFrame(), "", 0
 
 
+# ---------------------------------------------------------------------------
+# 労働分配率（都道府県別）
+# ---------------------------------------------------------------------------
+
+LABOR_SHARE_STATS_ID = "0004006333"
+
+# 都道府県コード → 都道府県名（全国00000を除く47都道府県）
+_PREF_CODE_TO_NAME: dict[str, str] = {
+    "01000": "北海道", "02000": "青森県", "03000": "岩手県", "04000": "宮城県",
+    "05000": "秋田県", "06000": "山形県", "07000": "福島県", "08000": "茨城県",
+    "09000": "栃木県", "10000": "群馬県", "11000": "埼玉県", "12000": "千葉県",
+    "13000": "東京都", "14000": "神奈川県", "15000": "新潟県", "16000": "富山県",
+    "17000": "石川県", "18000": "福井県", "19000": "山梨県", "20000": "長野県",
+    "21000": "岐阜県", "22000": "静岡県", "23000": "愛知県", "24000": "三重県",
+    "25000": "滋賀県", "26000": "京都府", "27000": "大阪府", "28000": "兵庫県",
+    "29000": "奈良県", "30000": "和歌山県", "31000": "鳥取県", "32000": "島根県",
+    "33000": "岡山県", "34000": "広島県", "35000": "山口県", "36000": "徳島県",
+    "37000": "香川県", "38000": "愛媛県", "39000": "高知県", "40000": "福岡県",
+    "41000": "佐賀県", "42000": "長崎県", "43000": "熊本県", "44000": "大分県",
+    "45000": "宮崎県", "46000": "鹿児島県", "47000": "沖縄県",
+}
+
+
+def fetch_labor_share_by_prefecture() -> tuple[pd.DataFrame, str]:
+    """
+    令和3年経済センサス-活動調査（統計表ID: 0004006333）から
+    全国・都道府県別の労働分配率（給与総額 ÷ 粗付加価値額）を算出する。
+    対象: 全産業（S公務を除く）、経営組織総数。
+
+    Returns:
+        (df, source_label)
+        df columns: 都道府県, 労働分配率（%）, 給与総額（百万円）, 粗付加価値額（百万円）
+    """
+    from datetime import date as _date
+
+    df, meta = fetch_stats_data(
+        stats_data_id=LABOR_SHARE_STATS_ID,
+        area_code=None,
+        limit=200,
+        extra_params={"cdTab": "255-2021,260-2021", "cdCat01": "AR", "cdCat02": "0"},
+    )
+
+    if df.empty or "area" not in df.columns or "tab" not in df.columns or "value" not in df.columns:
+        return pd.DataFrame(), ""
+
+    pivot = df.pivot_table(index="area", columns="tab", values="value", aggfunc="first")
+    wage_col, value_added_col = "255-2021", "260-2021"
+    if wage_col not in pivot.columns or value_added_col not in pivot.columns:
+        return pd.DataFrame(), ""
+
+    rows = []
+    for area_code, row in pivot.iterrows():
+        wage, value_added = row.get(wage_col), row.get(value_added_col)
+        if pd.isna(wage) or pd.isna(value_added) or value_added == 0:
+            continue
+        name = "全国" if area_code == "00000" else _PREF_CODE_TO_NAME.get(area_code)
+        if name is None:
+            continue
+        rows.append({
+            "都道府県": name,
+            "労働分配率（%）": round(wage / value_added * 100, 1),
+            "給与総額（百万円）": int(wage),
+            "粗付加価値額（百万円）": int(value_added),
+        })
+
+    if not rows:
+        return pd.DataFrame(), ""
+
+    df_result = pd.DataFrame(rows)
+    source = (
+        f"令和3年経済センサス-活動調査（2021年、最終取得: {_date.today().strftime('%Y-%m-%d')}）｜"
+        "労働分配率＝給与総額÷粗付加価値額、全産業（S公務を除く）"
+    )
+    return df_result, source
+
+
+def load_cached_labor_share() -> tuple[pd.DataFrame, str, str]:
+    """data/estat_cache/labor_share_prefecture.json からキャッシュデータを読み込む"""
+    from pathlib import Path
+    import json
+
+    cache_path = Path(__file__).parent / "data" / "estat_cache" / "labor_share_prefecture.json"
+    if not cache_path.exists():
+        return pd.DataFrame(), "", ""
+    try:
+        cache = json.loads(cache_path.read_text(encoding="utf-8"))
+        df = pd.DataFrame(cache["data"])
+        return df, cache.get("source", ""), cache.get("fetched_at", "")
+    except Exception:
+        return pd.DataFrame(), "", ""
+
+
 def fetch_tohoku_population_latest() -> pd.DataFrame:
     """
     東北4県の直近人口・高齢化率を e-Stat から取得する

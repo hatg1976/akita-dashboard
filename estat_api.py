@@ -391,7 +391,8 @@ def fetch_formatted_population_trend(
     area_code: str = AKITA_AREA_CODE,
 ) -> tuple[pd.DataFrame, str]:
     """
-    人口推計（statsDataId: 0003448237）から年次人口推移を取得・整形する
+    総務省統計局「社会・人口統計体系」都道府県データ（statsDataId: 0000010101、cat01=A1101_総人口）
+    から総人口の長期時系列（1975年度〜）を取得・整形する
 
     Returns:
         (df, source_label)
@@ -401,47 +402,25 @@ def fetch_formatted_population_trend(
     from datetime import date as _date
 
     df, meta = fetch_stats_data(
-        stats_data_id="0003448237",
+        stats_data_id="0000010101",
         area_code=area_code,
         limit=200,
+        extra_params={"cdCat01": "A1101"},
     )
 
     if df.empty or "time" not in df.columns or "value" not in df.columns:
         return pd.DataFrame(), ""
 
-    # cat01 から「総人口」コードを特定
-    cat01_map = meta.get("cat01", {})
-    total_code = None
-    for code, name in cat01_map.items():
-        if "総人口" in name:
-            total_code = code
-            break
-    # 見つからない場合は最初のコードを使用
-    if total_code is None and cat01_map:
-        total_code = list(cat01_map.keys())[0]
-
     df_work = df.copy()
-    if "cat01" in df_work.columns and total_code:
-        df_work = df_work[df_work["cat01"] == total_code]
-
-    if df_work.empty:
-        return pd.DataFrame(), ""
 
     # time コードを CLASS_INF のラベルに変換してから西暦年を取得する
-    # 例: "1301" → meta["time"]["1301"] = "2022年（令和4年）" → 2022
     time_meta = meta.get("time", {})
     def _decode_year(code) -> Optional[int]:
         label = time_meta.get(str(code), str(code))  # ラベルがあれば使う
         return _parse_year_from_label(label)
 
     df_work["年"] = df_work["time"].apply(_decode_year)
-    # e-Statの人口推計は「千人」単位の場合と「人」単位がある
-    # valueが1億未満かつ10万以上なら「人」単位と判断
-    max_val = df_work["value"].max()
-    if max_val > 100_000:
-        df_work["総人口（万人）"] = (df_work["value"] / 10_000).round(1)
-    else:
-        df_work["総人口（万人）"] = (df_work["value"] / 10).round(1)  # 千人→万人
+    df_work["総人口（万人）"] = (df_work["value"] / 10_000).round(1)
 
     df_result = (
         df_work[["年", "総人口（万人）"]]
@@ -451,7 +430,7 @@ def fetch_formatted_population_trend(
         .reset_index(drop=True)
     )
 
-    source = f"e-Stat 人口推計（最終取得: {_date.today().strftime('%Y-%m-%d')}）"
+    source = f"総務省統計局「社会・人口統計体系」都道府県データ（最終取得: {_date.today().strftime('%Y-%m-%d')}）"
     return df_result, source
 
 

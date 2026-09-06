@@ -453,6 +453,8 @@ def page_population():
 
     df_pop_real, pop_source, pop_fetched = _get_population(estat_api.AKITA_AREA_CODE)
     df_pop_forecast, pop_forecast_source = _get_population_forecast(estat_api.AKITA_AREA_CODE)
+    df_pop_national, national_source, national_fetched = _get_population(estat_api.NATIONAL_AREA_CODE)
+    df_pop_forecast_national, _ = _get_population_forecast(estat_api.NATIONAL_AREA_CODE)
     df_mig = get_sample_migration()
 
     # データソース表示
@@ -468,16 +470,18 @@ def page_population():
     # 実データがある場合は総人口の時系列グラフに使用（他のグラフはサンプルのまま）
     df_pop = get_sample_population()
 
-    # 実データがある場合は総人口グラフを実データで表示（将来推計があれば併せて表示）
+    # 実データがある場合は総人口グラフを実データで表示（将来推計・全国比較があれば併せて表示）
     if pop_fetched and not df_pop_real.empty:
+        has_national = national_fetched and not df_pop_national.empty
+
         st.subheader("総人口の推移（e-Stat 実データ・将来推計）")
-        fig = go.Figure()
+        fig = make_subplots(specs=[[{"secondary_y": True}]])
         fig.add_trace(go.Scatter(
             x=df_pop_real["年"], y=df_pop_real["総人口（万人）"],
-            mode="lines+markers", name="実績",
+            mode="lines+markers", name="秋田県（実績）",
             line=dict(color="#1f4e79", width=3),
             marker=dict(size=7),
-        ))
+        ), secondary_y=False)
         if not df_pop_forecast.empty:
             # 実績の最終点を推計トレースの起点に加え、線がつながって見えるようにする
             last_real = df_pop_real.sort_values("年").iloc[-1]
@@ -487,19 +491,48 @@ def page_population():
             ], ignore_index=True)
             fig.add_trace(go.Scatter(
                 x=df_forecast_connected["年"], y=df_forecast_connected["総人口（万人）"],
-                mode="lines+markers", name="将来推計",
+                mode="lines+markers", name="秋田県（将来推計）",
                 line=dict(color="#c0392b", width=2, dash="dot"),
                 marker=dict(size=6),
-            ))
+            ), secondary_y=False)
+        if has_national:
+            fig.add_trace(go.Scatter(
+                x=df_pop_national["年"], y=df_pop_national["総人口（万人）"],
+                mode="lines+markers", name="全国（実績・右軸）",
+                line=dict(color="#888888", width=2),
+                marker=dict(size=5),
+            ), secondary_y=True)
+            if not df_pop_forecast_national.empty:
+                last_real_national = df_pop_national.sort_values("年").iloc[-1]
+                df_forecast_national_connected = pd.concat([
+                    pd.DataFrame({
+                        "年": [last_real_national["年"]],
+                        "総人口（万人）": [last_real_national["総人口（万人）"]],
+                    }),
+                    df_pop_forecast_national,
+                ], ignore_index=True)
+                fig.add_trace(go.Scatter(
+                    x=df_forecast_national_connected["年"], y=df_forecast_national_connected["総人口（万人）"],
+                    mode="lines+markers", name="全国（将来推計・右軸）",
+                    line=dict(color="#888888", width=1.5, dash="dot"),
+                    marker=dict(size=4),
+                ), secondary_y=True)
         fig.update_layout(
             title=f"秋田県 総人口の推移　（実績: {pop_source} | 取得: {_fmt_date(pop_fetched)}）",
             height=380,
-            yaxis_title="万人",
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         )
+        fig.update_yaxes(title_text="秋田県（万人）", secondary_y=False)
+        if has_national:
+            fig.update_yaxes(title_text="全国（万人）", secondary_y=True)
         st.plotly_chart(fig, use_container_width=True)
+        caption_parts = []
         if not df_pop_forecast.empty:
-            st.caption(f"将来推計：{pop_forecast_source}")
+            caption_parts.append(f"将来推計：{pop_forecast_source}")
+        if has_national:
+            caption_parts.append("全国データは右軸（同一統計体系の実績・将来推計）")
+        if caption_parts:
+            st.caption("　｜　".join(caption_parts))
         st.markdown("---")
 
     # 人口構造の推移（積み上げ面グラフ）

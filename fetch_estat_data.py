@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import pandas as pd
-from estat_api import fetch_formatted_population_trend, fetch_population_forecast, fetch_stats_data, TOHOKU_PREFS
+from estat_api import fetch_formatted_population_trend, fetch_population_forecast, fetch_stats_data, TOHOKU_PREFS, NATIONAL_AREA_CODE
 from estat_api import fetch_industry_municipal_matrix
 from estat_api import fetch_sales_municipal_matrix
 from estat_api import fetch_openclose_stats, OPENCLOSE_CENSUS_IDS, _fetch_estat
@@ -302,7 +302,7 @@ def fetch_all():
     # 最初の1県でデバッグ用の時間メタを確認
     first_area = list(TOHOKU_PREFS.keys())[0]
     try:
-        _df_debug, _meta_debug = fetch_stats_data("0003448237", area_code=first_area, limit=5)
+        _df_debug, _meta_debug = fetch_stats_data("0000010101", area_code=first_area, limit=5)
         time_meta = _meta_debug.get("time", {})
         if time_meta:
             print(f"\n[DEBUG] 時間コード → ラベル（最初の5件）:")
@@ -313,7 +313,10 @@ def fetch_all():
     except Exception as e:
         print(f"[DEBUG] メタ確認エラー: {e}")
 
-    for area_code, pref_name in TOHOKU_PREFS.items():
+    # 東北4県 + 全国（総人口推移グラフで全国を右軸比較するために使用）
+    areas_to_fetch = {**TOHOKU_PREFS, NATIONAL_AREA_CODE: "全国"}
+
+    for area_code, pref_name in areas_to_fetch.items():
         print(f"\n--- {pref_name} ({area_code}) を取得中 ---")
         try:
             df, source = fetch_formatted_population_trend(area_code)

@@ -15,6 +15,9 @@ ESTAT_BASE_URL = "https://api.e-stat.go.jp/rest/3.0/app/json"
 # 秋田県コード（都道府県2桁 + "000"）
 AKITA_AREA_CODE = "05000"
 
+# 全国コード（社会・人口統計体系 都道府県データの地域コード）
+NATIONAL_AREA_CODE = "00000"
+
 # 統計分野コード
 STATS_FIELD_OPTIONS = {
     "すべて": "",

@@ -522,9 +522,19 @@ def page_population():
             height=380,
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         )
-        fig.update_yaxes(title_text="秋田県（万人）", secondary_y=False)
+        # 両軸とも0起点にする（自動レンジのままだと全国と秋田県の絶対的な人口規模の
+        # 大小関係が軸スケールで打ち消され、全国の線が秋田県より下に見えてしまうため）
+        akita_values = pd.concat([
+            df_pop_real["総人口（万人）"],
+            df_pop_forecast["総人口（万人）"] if not df_pop_forecast.empty else pd.Series(dtype=float),
+        ])
+        fig.update_yaxes(title_text="秋田県（万人）", range=[0, akita_values.max() * 1.1], secondary_y=False)
         if has_national:
-            fig.update_yaxes(title_text="全国（万人）", secondary_y=True)
+            national_values = pd.concat([
+                df_pop_national["総人口（万人）"],
+                df_pop_forecast_national["総人口（万人）"] if not df_pop_forecast_national.empty else pd.Series(dtype=float),
+            ])
+            fig.update_yaxes(title_text="全国（万人）", range=[0, national_values.max() * 1.1], secondary_y=True)
         st.plotly_chart(fig, use_container_width=True)
         caption_parts = []
         if not df_pop_forecast.empty:

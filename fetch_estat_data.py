@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import pandas as pd
-from estat_api import fetch_formatted_population_trend, fetch_stats_data, TOHOKU_PREFS
+from estat_api import fetch_formatted_population_trend, fetch_population_forecast, fetch_stats_data, TOHOKU_PREFS
 from estat_api import fetch_industry_municipal_matrix
 from estat_api import fetch_sales_municipal_matrix
 from estat_api import fetch_openclose_stats, OPENCLOSE_CENSUS_IDS, _fetch_estat
@@ -341,6 +341,33 @@ def fetch_all():
         except Exception as e:
             print(f"  ❌ エラー: {type(e).__name__}: {e}")
             errors.append(pref_name)
+
+        # 将来推計人口（社人研 日本の地域別将来推計人口 令和5年推計）
+        try:
+            df_fc, source_fc = fetch_population_forecast(area_code)
+            if df_fc.empty:
+                print(f"  ⚠ 将来推計人口が空でした（スキップ）")
+                errors.append(f"{pref_name}_将来推計")
+                continue
+
+            cache_fc = {
+                "fetched_at": today,
+                "area_code": area_code,
+                "pref_name": pref_name,
+                "source": source_fc,
+                "data": df_fc.to_dict(orient="records"),
+            }
+            out_path_fc = OUTPUT_DIR / f"population_forecast_{area_code}.json"
+            out_path_fc.write_text(
+                json.dumps(cache_fc, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            print(f"  ✅ 保存完了: {out_path_fc.name}（{len(df_fc)}件）")
+            fetched.append(f"{pref_name}_将来推計")
+
+        except Exception as e:
+            print(f"  ❌ 将来推計エラー: {type(e).__name__}: {e}")
+            errors.append(f"{pref_name}_将来推計")
 
     # 産業×市町村マトリックスを取得
     if fetch_matrix(today):

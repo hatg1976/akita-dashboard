@@ -455,6 +455,88 @@ def fetch_formatted_population_trend(
     return df_result, source
 
 
+# 将来推計人口（社人研「日本の地域別将来推計人口」）の cat01 コード → 推計対象年
+# 統計表ID 0000010101（社会・人口統計体系 都道府県データ「Ａ　人口・世帯」）
+# A191001（2020年推計）は既に実績が確定しているため除外し、2025年以降のみ使用する
+POPULATION_FORECAST_CAT01: dict[str, int] = {
+    "A191002": 2025,
+    "A191003": 2030,
+    "A191004": 2035,
+    "A191005": 2040,
+    "A191006": 2045,
+    "A191007": 2050,
+}
+
+
+def fetch_population_forecast(area_code: str = AKITA_AREA_CODE) -> tuple[pd.DataFrame, str]:
+    """
+    国立社会保障・人口問題研究所「日本の地域別将来推計人口」（令和5年推計）から
+    将来推計人口（2025〜2050年、5年刻み）を取得する。
+    統計表ID: 0000010101（同一cat01コードに複数回の公表年度が含まれる場合は最新の公表年度を採用）
+
+    Returns:
+        (df, source_label)
+        df columns: 年, 総人口（万人）
+    """
+    df, meta = fetch_stats_data(
+        stats_data_id="0000010101",
+        area_code=area_code,
+        limit=500,
+        extra_params={"cdCat01": ",".join(POPULATION_FORECAST_CAT01.keys())},
+    )
+
+    if df.empty or "cat01" not in df.columns or "time" not in df.columns or "value" not in df.columns:
+        return pd.DataFrame(), ""
+
+    # 同一cat01コードに複数の公表年度（time）が存在する場合、最新の公表年度を採用する
+    df_work = df.copy()
+    df_work["_time_int"] = pd.to_numeric(df_work["time"].str[:4], errors="coerce")
+    df_work = df_work.dropna(subset=["_time_int", "value"])
+    if df_work.empty:
+        return pd.DataFrame(), ""
+    idx = df_work.groupby("cat01")["_time_int"].idxmax()
+    df_latest = df_work.loc[idx]
+
+    rows = []
+    for _, row in df_latest.iterrows():
+        year = POPULATION_FORECAST_CAT01.get(row["cat01"])
+        if year is None:
+            continue
+        rows.append({"年": year, "総人口（万人）": round(row["value"] / 10_000, 1)})
+
+    if not rows:
+        return pd.DataFrame(), ""
+
+    df_result = pd.DataFrame(rows).sort_values("年").reset_index(drop=True)
+    source = "国立社会保障・人口問題研究所「日本の地域別将来推計人口」（令和5年推計）"
+    return df_result, source
+
+
+def load_cached_population_forecast(area_code: str) -> tuple[pd.DataFrame, str]:
+    """
+    data/estat_cache/population_forecast_{area_code}.json からキャッシュデータを読み込む
+
+    Returns:
+        (df, source_label) または (空DataFrame, "") ファイルがない場合
+    """
+    from pathlib import Path
+    import json
+
+    cache_path = (
+        Path(__file__).parent / "data" / "estat_cache" / f"population_forecast_{area_code}.json"
+    )
+    if not cache_path.exists():
+        return pd.DataFrame(), ""
+
+    try:
+        cache = json.loads(cache_path.read_text(encoding="utf-8"))
+        df = pd.DataFrame(cache["data"])
+        source = cache.get("source", "")
+        return df, source
+    except Exception:
+        return pd.DataFrame(), ""
+
+
 def fetch_tohoku_population_latest() -> pd.DataFrame:
     """
     東北4県の直近人口・高齢化率を e-Stat から取得する

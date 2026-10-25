@@ -1,5 +1,6 @@
 # 秋田県経済ダッシュボード 自動更新タスク登録スクリプト
-# 管理者権限で実行してください
+# タスク登録自体は管理者権限で実行。タスクは通常権限（Limited）で動かす
+# （git pull したコードを管理者権限で実行しないため）
 
 $taskName = "AkitaDashboardUpdate"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -40,7 +41,7 @@ Register-ScheduledTask `
     -Action $action `
     -Settings $settings `
     -Description "秋田県経済ダッシュボード データ自動更新（毎月1日、未実行時は次回起動時に実行）" `
-    -RunLevel Highest
+    -RunLevel Limited
 
 Write-Host ""
 Write-Host "タスク登録完了: $taskName" -ForegroundColor Green

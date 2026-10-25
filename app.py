@@ -9,6 +9,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import io
+import re
 
 import estat_api
 import market_data
@@ -2768,6 +2769,7 @@ def page_estat():
             keyword = st.text_input(
                 "検索キーワード",
                 placeholder="例: 人口 秋田 / 賃金 製造業 / 商業統計",
+                max_chars=50,
             )
         with col2:
             field_label = st.selectbox(
@@ -2857,6 +2859,11 @@ def page_estat():
         if fetch_btn:
             if not stats_id:
                 st.warning("統計表IDを入力してください。")
+            # 公開アプリのため、任意文字列をAPIパラメータに流し込ませない
+            elif not re.fullmatch(r"\d{10}", stats_id):
+                st.warning("統計表IDは10桁の数字で入力してください。")
+            elif area_code and not re.fullmatch(r"[0-9*]{1,5}(,[0-9*]{1,5})*", area_code):
+                st.warning("地域コードは5桁以内の数字（または * ）で入力してください。")
             elif not estat_api.is_api_key_set():
                 st.error("APIキーが設定されていません。サーバーの環境変数 ESTAT_API_KEY を確認してください。")
             else:

@@ -55,9 +55,15 @@ def fetch_estat(endpoint: str, params: dict) -> dict:
     params["appId"] = ESTAT_API_KEY
     params["lang"] = "J"
     url = f"{ESTAT_BASE_URL}/{endpoint}"
-    response = requests.get(url, params=params, timeout=30)
-    response.raise_for_status()
-    return response.json()
+    # 例外メッセージのURLにAPIキーが含まれるため、伏字化して投げ直す
+    # （呼び出し元が str(e) を画面に表示するケースがある）
+    try:
+        response = requests.get(url, params=params, timeout=30)
+        response.raise_for_status()
+        return response.json()
+    except (requests.RequestException, ValueError) as e:
+        msg = str(e).replace(ESTAT_API_KEY, "***") if ESTAT_API_KEY else str(e)
+        raise RuntimeError(f"e-Stat API通信エラー: {type(e).__name__}: {msg}") from None
 
 
 def search_stats(keyword: str, area_code: str = AKITA_PREF_CODE) -> pd.DataFrame:

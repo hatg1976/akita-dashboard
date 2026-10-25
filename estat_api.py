@@ -99,6 +99,13 @@ def is_api_key_set() -> bool:
     return bool(_get_api_key())
 
 
+def _mask_secret(text: str, secret: str) -> str:
+    """文字列中のAPIキーを伏字にする（例外メッセージを画面表示する前に通す）"""
+    if secret:
+        text = text.replace(secret, "***")
+    return text
+
+
 def _fetch_estat(endpoint: str, params: dict) -> dict:
     """
     e-Stat API への共通リクエスト処理
@@ -118,9 +125,16 @@ def _fetch_estat(endpoint: str, params: dict) -> dict:
     full_params = {**params, "appId": api_key, "lang": "J"}
     url = f"{ESTAT_BASE_URL}/{endpoint}"
 
-    resp = requests.get(url, params=full_params, timeout=30)
-    resp.raise_for_status()
-    data = resp.json()
+    # requests の例外メッセージにはURL（appId=APIキー入り）が含まれ、
+    # 画面の st.error にそのまま出るとキーが漏れるため、伏字化して投げ直す
+    try:
+        resp = requests.get(url, params=full_params, timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+    except (requests.RequestException, ValueError) as e:
+        raise RuntimeError(
+            f"e-Stat API通信エラー: {type(e).__name__}: {_mask_secret(str(e), api_key)}"
+        ) from None
 
     # API 側のエラーステータスを確認（ステータスが 0 以外はエラー）
     for key in ("GET_STATS_DATA", "GET_STATS_LIST", "GET_META_INFO"):

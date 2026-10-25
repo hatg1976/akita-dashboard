@@ -23,6 +23,9 @@ akita_dashboard/data/*.csv
 akita_dashboard/data/*.xlsx
 akita_dashboard/data/last_updated.txt
 
+# 個人情報・顧客資料を含む可能性があるフォルダ
+downloads/
+
 # OS
 .DS_Store
 Thumbs.db
@@ -30,3 +33,9 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Claude Code の個人用設定（ローカルのファイル名・コマンド履歴を含むため公開しない）
+.claude/settings.local.json
+
+# 自動更新ログ（ローカル専用）
+logs/*.txt

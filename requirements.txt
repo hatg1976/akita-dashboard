@@ -1,5 +1,7 @@
 streamlit>=1.32.0,<2.0.0
-pandas>=2.2.1,<3.0.0
+pandas>=2.2.2,<3.0.0
+# HF Spaces の pyarrow は NumPy 2 系必須（1 系だと st.dataframe が ImportError）
+numpy>=2.0,<3.0
 plotly>=5.20.0,<6.0.0
 requests>=2.31.0
 python-dotenv>=1.0.1

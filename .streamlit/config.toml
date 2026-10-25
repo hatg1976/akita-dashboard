@@ -6,3 +6,8 @@ primaryColor = "#1f4e79"
 backgroundColor = "#ffffff"
 secondaryBackgroundColor = "#f0f2f6"
 textColor = "#262730"
+
+[client]
+# 公開アプリのため、例外発生時にサーバー内パスやトレースバックを画面に出さない
+# （詳細はサーバーログにのみ出力される）
+showErrorDetails = "none"

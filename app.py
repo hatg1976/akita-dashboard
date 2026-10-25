@@ -402,6 +402,11 @@ st.sidebar.markdown("""
     height: auto !important;
     min-height: 1.6rem !important;
 }
+/* Streamlit 1.56 以降はボタン内部の div/span が中央寄せのため、内側も左寄せにする */
+[data-testid="stSidebar"] .stButton button > div,
+[data-testid="stSidebar"] .stButton button > div > span {
+    justify-content: flex-start !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
